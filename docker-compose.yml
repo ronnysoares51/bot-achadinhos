@@ -13,9 +13,8 @@ services:
       - PASTA_DADOS=/app/dados
       - PAINEL_PORTA=3000
     volumes:
-      - dados:/app/dados
+      # pasta fixa no VPS: configurações, senha, fila e sessão do WhatsApp sobrevivem a reimplantações
+      - /opt/bot-achadinhos-dados:/app/dados
     ports:
       - "3010:3000"
 
-volumes:
-  dados:
