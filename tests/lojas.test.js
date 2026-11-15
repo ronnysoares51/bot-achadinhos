@@ -99,3 +99,24 @@ test('Shopee: query sem variáveis GraphQL e com valores escapados', async () =>
   assert.match(corpos[0].query, /keyword: "fone \\"bluetooth\\""/);
   assert.doesNotMatch(corpos[0].query, /shopName/);
 });
+
+test('Shopee: busca tenta de novo quando a API dá System Error', async () => {
+  const { config } = await import('../src/config.js');
+  config.shopee.appId = '123';
+  config.shopee.secret = 's';
+  let n = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, op) => {
+    n++;
+    if (n === 1) return { ok: true, json: async () => ({ errors: [{ message: 'error [10000]: System Error', extensions: { code: 10000 } }] }) };
+    return { ok: true, json: async () => ({ data: { productOfferV2: { nodes: [{ itemId: 1, productName: 'X', priceMin: '10', offerLink: 'https://s.shopee.com.br/x' }] } } }) };
+  };
+  try {
+    const { buscarOfertasShopee } = await import('../src/lojas/shopee.js');
+    const r = await buscarOfertasShopee('fone');
+    assert.equal(r.length, 1);
+    assert.equal(n, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

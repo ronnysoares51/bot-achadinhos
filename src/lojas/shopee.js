@@ -48,12 +48,31 @@ export async function gerarLinkShopee(url) {
 
 const CAMPOS = 'itemId shopId productName priceMin priceMax priceDiscountRate commissionRate sales ratingStar imageUrl productLink offerLink';
 
-/** Busca ofertas por palavra-chave. sortType 2 = mais vendidos. */
+/**
+ * Busca ofertas por palavra-chave. sortType 2 = mais vendidos.
+ * A Shopee às vezes responde "System Error" (10000) para algumas buscas: tenta de novo
+ * com outra ordenação e menos resultados antes de desistir.
+ */
 export async function buscarOfertasShopee(palavra, { limite = 20, sortType = 2 } = {}) {
-  const data = await graphql(
-    `{ productOfferV2(keyword: ${JSON.stringify(palavra)}, sortType: ${Number(sortType)}, page: 1, limit: ${Number(limite)}) { nodes { ${CAMPOS} } } }`,
-  );
-  return (data?.productOfferV2?.nodes || []).map(nodeParaOferta);
+  const tentativas = [
+    [sortType, limite],
+    [1, 10],
+    [5, 10],
+  ];
+  let ultimoErro;
+  for (const [sort, lim] of tentativas) {
+    try {
+      const data = await graphql(
+        `{ productOfferV2(keyword: ${JSON.stringify(palavra)}, sortType: ${Number(sort)}, page: 1, limit: ${Number(lim)}) { nodes { ${CAMPOS} } } }`,
+      );
+      return (data?.productOfferV2?.nodes || []).map(nodeParaOferta);
+    } catch (e) {
+      ultimoErro = e;
+      if (!/10000|System Error/i.test(e.message)) throw e;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  throw ultimoErro;
 }
 
 /** Dados de um produto específico a partir da URL (shopId/itemId). */
