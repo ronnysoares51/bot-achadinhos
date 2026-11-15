@@ -137,3 +137,16 @@ test('Clone: salva grupos escolhidos e vale na hora', async () => {
   const html = await (await fetch(`${base}/clone`, { headers: { cookie } })).text();
   assert.match(html, /Grupos do WhatsApp para clonar/);
 });
+
+test('Fila: botão remover tira a oferta (e o formulário não desativa o botão antes de enviar)', async () => {
+  const cookie = await entrar();
+  const { adicionar, listar } = await import('../src/fila.js');
+  const item = adicionar({ loja: 'shopee', titulo: 'Oferta para remover', link: 'https://s.shopee.com.br/x', chave: 'shopee:remover-1' });
+  const html = await (await fetch(base, { headers: { cookie } })).text();
+  assert.match(html, /Oferta para remover/);
+  assert.doesNotMatch(html, /onsubmit="this\.querySelectorAll\('button'\)\.forEach\(b=>b\.disabled=true\)"/);
+  const r = await fetch(`${base}/fila`, { method: 'POST', body: `id=${item.id}&acao=remover`, headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  assert.equal(r.status, 303);
+  assert.match(decodeURIComponent(r.headers.get('location')), /removida/);
+  assert.ok(!listar().some((o) => o.id === item.id));
+});

@@ -323,7 +323,7 @@ export function telaInicio(d) {
     <div class="card">${d.fila.length ? `<ul class="fila">${d.fila.slice(0, 30).map((o) => `<li>
       <span class="tag ${esc(o.loja)}">${esc(d.nomes[o.loja] || o.loja)}</span>
       <span class="tit">${esc(o.titulo)}${o.origem ? `<br><span class="origem">🧲 clonada de ${esc(o.origem)}</span>` : ''}</span>${o.precoPor ? `<span class="preco">${brl(o.precoPor)}</span>` : ''}
-      <form method="post" action="/fila" class="acoes" onsubmit="this.querySelectorAll('button').forEach(b=>b.disabled=true)">
+      <form method="post" action="/fila" class="acoes" onsubmit="const f=this;setTimeout(()=>f.querySelectorAll('button').forEach(b=>b.disabled=true),0)">
         <input type="hidden" name="id" value="${esc(o.id)}">
         <button class="mini" name="acao" value="postar" title="Postar agora">${ic('envio')}<span>Postar</span></button>
         <button class="mini perigo" name="acao" value="remover" aria-label="Remover da fila" title="Remover">${ic('lixo')}</button>
