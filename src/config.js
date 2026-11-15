@@ -41,6 +41,13 @@ export const config = {
     pausaMin: num(process.env.WHATSAPP_PAUSA_MIN, 20),
     pausaMax: num(process.env.WHATSAPP_PAUSA_MAX, 60),
   },
+  clone: {
+    // Grupos de ofertas de outras pessoas que o número do bot acompanha (IDs ou nomes).
+    grupos: lista(process.env.WHATSAPP_MONITORAR),
+    // true = vai direto para a fila; false = manda para você aprovar no Telegram.
+    automatico: process.env.CLONE_AUTOMATICO === 'true',
+    maxHora: num(process.env.CLONE_MAX_HORA, 10),
+  },
   shopee: {
     appId: process.env.SHOPEE_APP_ID || '',
     secret: process.env.SHOPEE_SECRET || '',

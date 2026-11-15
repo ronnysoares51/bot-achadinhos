@@ -10,11 +10,25 @@ import { config } from '../config.js';
 let sock = null;
 let conectado = false;
 let ultimoQr = null;
+const nomesGrupos = new Map();
+
+/** O grupo está na lista de monitorados (por ID ou pelo nome exato)? */
+async function monitorado(jid) {
+  const lista = config.clone.grupos;
+  if (lista.includes(jid)) return true;
+  if (!jid.endsWith('@g.us')) return false;
+  if (!nomesGrupos.has(jid)) {
+    const meta = await sock.groupMetadata(jid).catch(() => null);
+    nomesGrupos.set(jid, meta?.subject || '');
+  }
+  return lista.includes(nomesGrupos.get(jid));
+}
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const statusWhatsApp = () => ({ ativo: config.whatsapp.ativo, conectado, temQr: Boolean(ultimoQr) });
 
-export async function iniciarWhatsApp({ aoReceberQr } = {}) {
+export async function iniciarWhatsApp(opcoes = {}) {
+  const { aoReceberQr, aoReceberMensagem } = opcoes;
   if (!config.whatsapp.ativo) return;
   const baileys = await import('@whiskeysockets/baileys');
   const makeWASocket = baileys.default;
@@ -26,6 +40,22 @@ export async function iniciarWhatsApp({ aoReceberQr } = {}) {
 
   sock = makeWASocket({ auth: state, version, browser: ['Bot Achadinhos', 'Chrome', '1.0'], syncFullHistory: false });
   sock.ev.on('creds.update', saveCreds);
+
+  // Clone de ofertas: mensagens dos grupos monitorados vão para o callback.
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify' || !aoReceberMensagem || !config.clone.grupos.length) return;
+    for (const m of messages) {
+      try {
+        const jid = m.key?.remoteJid;
+        if (!jid || m.key.fromMe || !(await monitorado(jid))) continue;
+        const msg = m.message || {};
+        const texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption;
+        if (texto) await aoReceberMensagem({ grupo: jid, nomeGrupo: nomesGrupos.get(jid) || jid, texto });
+      } catch (e) {
+        console.error('[whatsapp] monitor:', e.message);
+      }
+    }
+  });
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       ultimoQr = qr;
@@ -48,7 +78,7 @@ export async function iniciarWhatsApp({ aoReceberQr } = {}) {
         console.log('[whatsapp] Sessão encerrada no celular. Apague a pasta da sessão e conecte de novo.');
       } else {
         console.log('[whatsapp] Conexão caiu, reconectando em 5s...');
-        setTimeout(() => iniciarWhatsApp({ aoReceberQr }), 5000);
+        setTimeout(() => iniciarWhatsApp(opcoes), 5000);
       }
     }
   });

@@ -11,7 +11,7 @@ function ler() {
   try {
     return JSON.parse(fs.readFileSync(arquivo(), 'utf8'));
   } catch {
-    return { fila: [], historico: {}, postsHoje: { dia: '', total: 0 } };
+    return { fila: [], historico: {}, postsHoje: { dia: '', total: 0 }, enviados: [], clones: { dia: '', total: 0 } };
   }
 }
 
@@ -52,8 +52,22 @@ export function proxima() {
   return ler().fila[0] || null;
 }
 
-export function marcarPostada(oferta, dia) {
+export function marcarPostada(oferta, dia, resultados = []) {
   const d = ler();
+  d.enviados = [
+    {
+      titulo: oferta.titulo,
+      loja: oferta.loja,
+      precoPor: oferta.precoPor ?? null,
+      link: oferta.link,
+      imagem: oferta.imagem ?? null,
+      origem: oferta.origem ?? null,
+      quando: new Date().toISOString(),
+      destinos: resultados.filter((r) => r.ok).length,
+      falhas: resultados.filter((r) => !r.ok).length,
+    },
+    ...(d.enviados || []),
+  ].slice(0, 100);
   d.fila = d.fila.filter((o) => o.id !== oferta.id);
   d.historico[oferta.chave] = Date.now();
   // limpa histórico antigo
@@ -66,4 +80,22 @@ export function marcarPostada(oferta, dia) {
 export function postsHoje(dia) {
   const p = ler().postsHoje;
   return p.dia === dia ? p.total : 0;
+}
+
+export function listarEnviados() {
+  return ler().enviados || [];
+}
+
+/** Conta ofertas trazidas pelo clone no dia (para o painel). */
+export function registrarClone(origem, dia = new Date().toISOString().slice(0, 10)) {
+  const d = ler();
+  if (!d.clones || d.clones.dia !== dia) d.clones = { dia, total: 0 };
+  d.clones.total += 1;
+  d.clones.ultimaOrigem = origem || null;
+  salvar(d);
+}
+
+export function clonesHoje(dia = new Date().toISOString().slice(0, 10)) {
+  const c = ler().clones;
+  return c && c.dia === dia ? c.total : 0;
 }

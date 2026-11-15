@@ -70,6 +70,12 @@ docker compose up -d
 docker compose logs -f   # QR do WhatsApp aparece aqui
 ```
 
+## Recursos inspirados no DisparaPromo
+
+- **Modelo da mensagem**: o texto de cada post é editável no painel, com variáveis (`{titulo}`, `{preco}`, `{preco_antigo}`, `{desconto}`, `{economia}`, `{cupom}`, `{obs}`, `{nota}`, `{vendidos}`, `{loja}`, `{link}`) e prévia ao vivo. Linhas com variável vazia somem sozinhas.
+- **Clone de ofertas**: o número do bot acompanha grupos de ofertas de outras pessoas no WhatsApp (`WHATSAPP_MONITORAR`), pega as promoções e troca o link pelo seu. Só Shopee (pela API) e Mercado Livre (matt_word/matt_tool) entram, porque links de Shein e TikTok Shop de outra pessoa não podem virar seus. Por padrão cada oferta chega no seu Telegram para aprovar; com `CLONE_AUTOMATICO=true` vai direto para a fila. Limite por hora: `CLONE_MAX_HORA`.
+- **Meus envios e fila no painel**: histórico dos últimos envios e botões para postar ou remover ofertas da fila.
+
 ## Painel web
 
 Com `PAINEL_SENHA` preenchido, o bot abre um painel na porta `3000` (em produção: **http://achadinhos.rstvquix.com:3010**):

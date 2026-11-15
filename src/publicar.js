@@ -16,6 +16,6 @@ export async function publicar(oferta, fuso) {
   const tg = await publicarNosCanais(oferta, formatarTelegram(oferta));
   const wa = await publicarNosGrupos(oferta, formatarWhatsApp(oferta));
   const resultados = [...tg, ...wa];
-  if (resultados.some((r) => r.ok)) marcarPostada(oferta, diaLocal(new Date(), fuso));
+  if (resultados.some((r) => r.ok)) marcarPostada(oferta, diaLocal(new Date(), fuso), resultados);
   return resultados;
 }

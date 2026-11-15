@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { iniciarWhatsApp } from './destinos/whatsapp.js';
-import { iniciarPainelTelegram, avisarAdmins } from './telegramAdmin.js';
+import { iniciarPainelTelegram, avisarAdmins, enviarParaAprovacao } from './telegramAdmin.js';
+import { processarMensagem } from './clone.js';
 import { iniciarAgendador } from './agendador.js';
 import { iniciarPainelWeb } from './painel.js';
 import { chamar } from './destinos/telegram.js';
@@ -18,6 +19,11 @@ async function main() {
   }
 
   await iniciarWhatsApp({
+    aoReceberMensagem: async (msg) => {
+      const r = await processarMensagem(msg, { aprovar: enviarParaAprovacao, avisar: avisarAdmins }).catch((e) => ({ ok: false, motivo: e.message }));
+      if (r.ok) console.log(`[clone] ${msg.nomeGrupo}: oferta enviada para ${r.destino}`);
+      else if (!/sem link|repetida/.test(r.motivo)) console.log(`[clone] ${msg.nomeGrupo}: ignorada (${r.motivo})`);
+    },
     aoReceberQr: (png) => {
       for (const id of config.telegram.admins) {
         chamar('sendMessage', { chat_id: id, text: `📱 QR do WhatsApp gerado. Abra o painel web para escanear (arquivo ${png}).` }).catch(() => {});

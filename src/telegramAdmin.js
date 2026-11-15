@@ -86,24 +86,35 @@ async function tratarMensagem(msg) {
   await chamar('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
   try {
     const oferta = await montarOferta(texto);
-    const id = Math.random().toString(36).slice(2, 10);
-    pendentes.set(id, oferta);
-    setTimeout(() => pendentes.delete(id), 6 * 3600_000);
-    const aviso = jaPostada(oferta.chave) ? '\n\n⚠️ <i>Essa oferta já foi postada nos últimos 7 dias.</i>' : '';
-    const faltando = !oferta.precoPor ? '\n\n✏️ <i>Não achei o preço: reenvie com a linha "por: 99,90".</i>' : '';
-    await enviar(chatId, {
-      legenda: `${formatarTelegram(oferta)}\n\n🔗 ${oferta.link}${aviso}${faltando}`,
-      imagem: oferta.imagem,
-      teclado: {
-        inline_keyboard: [
-          [{ text: '✅ Postar agora', callback_data: `agora:${id}` }, { text: '🕒 Pôr na fila', callback_data: `fila:${id}` }],
-          [{ text: '🗑 Descartar', callback_data: `descartar:${id}` }],
-        ],
-      },
-    });
+    await enviarPrevia(chatId, oferta);
   } catch (e) {
     await responder(chatId, `⚠️ ${e.message}`);
   }
+}
+
+/** Mostra a prévia com os botões Postar agora / Pôr na fila / Descartar. */
+async function enviarPrevia(chatId, oferta, cabecalho = '') {
+  const id = Math.random().toString(36).slice(2, 10);
+  pendentes.set(id, oferta);
+  setTimeout(() => pendentes.delete(id), 6 * 3600_000);
+  const aviso = jaPostada(oferta.chave) ? '\n\n⚠️ <i>Essa oferta já foi postada nos últimos 7 dias.</i>' : '';
+  const faltando = !oferta.precoPor ? '\n\n✏️ <i>Não achei o preço: reenvie com a linha "por: 99,90".</i>' : '';
+  await enviar(chatId, {
+    legenda: `${cabecalho}${formatarTelegram(oferta)}\n\n🔗 ${oferta.link}${aviso}${faltando}`,
+    imagem: oferta.imagem,
+    teclado: {
+      inline_keyboard: [
+        [{ text: '✅ Postar agora', callback_data: `agora:${id}` }, { text: '🕒 Pôr na fila', callback_data: `fila:${id}` }],
+        [{ text: '🗑 Descartar', callback_data: `descartar:${id}` }],
+      ],
+    },
+  });
+}
+
+/** Clone de ofertas no modo manual: cada admin recebe a prévia para aprovar. */
+export async function enviarParaAprovacao(oferta, origem) {
+  const cab = `🧲 <b>Oferta clonada</b> de <i>${String(origem).replace(/[<>&]/g, '')}</i> (já com o seu link)\n\n`;
+  for (const id of config.telegram.admins) await enviarPrevia(id, oferta, cab).catch((e) => console.error('[telegram] aprovação:', e.message));
 }
 
 async function postarAgora(chatId, oferta) {

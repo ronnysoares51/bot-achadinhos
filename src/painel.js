@@ -4,7 +4,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ARQUIVO_CONFIG, lerConfigSalva } from './config.js';
 import { statusWhatsApp } from './destinos/whatsapp.js';
-import { listar, postsHoje } from './fila.js';
+import { listar, postsHoje, listarEnviados, clonesHoje, remover } from './fila.js';
+import { publicar } from './publicar.js';
+import { MODELO_PADRAO } from './formatar.js';
 import { diaLocal } from './publicar.js';
 import { NOMES } from './lojas/index.js';
 import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo } from './painelVisual.js';
@@ -72,7 +74,11 @@ function dadosInicio(msg) {
     horaInicio: config.agendador.horaInicio,
     horaFim: config.agendador.horaFim,
     intervalo: config.agendador.intervaloMin,
-    valor: (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? ''),
+    valor: (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? (k === 'MODELO_MENSAGEM' ? MODELO_PADRAO : '')),
+    enviados: listarEnviados(),
+    cloneAtivo: config.clone.grupos.length > 0,
+    clonesHoje: clonesHoje(),
+    hora: (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: config.agendador.fusoHorario, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
     preenchido: (k) => Boolean(salvo[k] || process.env[k]),
     passos: [
       { t: 'Token do Telegram', d: 'Crie o bot no @BotFather e cole o token em Configurações → Telegram.', feito: Boolean(config.telegram.token) },
@@ -139,12 +145,25 @@ export function iniciarPainelWeb() {
         return fs.createReadStream(png).pipe(res);
       }
 
+      if (url.pathname === '/fila' && req.method === 'POST') {
+        const { id, acao } = await lerCorpo(req);
+        const oferta = listar().find((o) => o.id === id);
+        let msg = 'Oferta não encontrada na fila.';
+        if (oferta && acao === 'remover') msg = remover(id) ? 'Oferta removida da fila.' : msg;
+        if (oferta && acao === 'postar') {
+          const res = await publicar(oferta, config.agendador.fusoHorario);
+          const ok = res.filter((r) => r.ok).length;
+          msg = res.length ? `Postada em ${ok} de ${res.length} destino(s).` : 'Nenhum destino configurado (canal do Telegram ou grupos do WhatsApp).';
+        }
+        return enviar(303, '', { Location: `/?msg=${encodeURIComponent(msg)}` });
+      }
+
       if (url.pathname === '/config' && req.method === 'POST') {
         const dados = await lerCorpo(req);
         const atual = lerConfigSalva();
         for (const [k, v] of Object.entries(dados)) {
           if (!CHAVES.has(k)) continue;
-          const val = String(v).trim();
+          const val = String(v).replace(/\r\n/g, '\n').trim();
           if (SECRETOS.has(k) && !val) continue; // segredo em branco = manter
           atual[k] = val;
         }

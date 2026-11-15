@@ -1,45 +1,93 @@
 import { NOMES } from './lojas/index.js';
 
-const brl = (n) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const EMOJI = { mercadolivre: '🟡', shopee: '🟠', shein: '⚫', tiktokshop: '🎵' };
+// Modelo da mensagem: texto livre com variáveis entre chaves, no formato do WhatsApp
+// (*negrito*, _itálico_, ~riscado~). Linha com variável vazia some sozinha.
+export const VARIAVEIS = {
+  titulo: 'Nome do produto',
+  loja: 'Nome da loja',
+  preco: 'Preço atual (R$ 49,90)',
+  preco_antigo: 'Preço antigo (R$ 99,90)',
+  desconto: 'Desconto (50%)',
+  economia: 'Quanto economiza (R$ 50,00)',
+  cupom: 'Código do cupom',
+  obs: 'Observação (ex.: frete grátis)',
+  nota: 'Nota de avaliação (4,8)',
+  vendidos: 'Quantidade vendida',
+  link: 'Seu link de afiliado',
+};
+
+export const MODELO_PADRAO = `🔥 *{titulo}*
+
+~De {preco_antigo}~
+💰 *Por {preco}* ({desconto} OFF)
+🎟️ Cupom: *{cupom}*
+⭐ {nota} · {vendidos} vendidos
+ℹ️ {obs}
+
+🛒 {loja}
+👉 {link}
+
+_Preço sujeito a alteração._`;
+
+const brl = (n) => Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function limparTitulo(t) {
+  return String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+
+/** Valores de cada variável para uma oferta ('' quando não existe). */
+export function valores(o) {
+  const temDe = o.precoDe && o.precoPor && o.precoDe > o.precoPor;
+  const vendidos = Number(o.vendas) || 0;
+  return {
+    titulo: limparTitulo(o.titulo),
+    loja: NOMES[o.loja] || '',
+    preco: o.precoPor ? brl(o.precoPor) : '',
+    preco_antigo: temDe ? brl(o.precoDe) : '',
+    desconto: o.desconto ? `${o.desconto}%` : '',
+    economia: temDe ? brl(o.precoDe - o.precoPor) : '',
+    cupom: o.cupom || '',
+    obs: o.obs || '',
+    nota: o.nota ? Number(o.nota).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '',
+    vendidos: vendidos ? (vendidos >= 1000 ? `${Math.floor(vendidos / 1000)} mil+` : String(vendidos)) : '',
+    link: o.link || '',
+  };
+}
+
+/**
+ * Aplica o modelo: troca {variavel} pelo valor e remove as linhas com alguma variável vazia.
+ * Linhas em branco seguidas viram uma só.
+ */
+export function aplicarModelo(modelo, o, { semLink = false } = {}) {
+  const v = valores(o);
+  const linhas = [];
+  for (const linha of String(modelo || MODELO_PADRAO).split('\n')) {
+    const vars = [...linha.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => k in v);
+    if (semLink && vars.includes('link')) continue;
+    if (vars.some((k) => !v[k])) continue;
+    linhas.push(linha.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m)));
+  }
+  return linhas.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function limparTitulo(t) {
-  return String(t).replace(/\s+/g, ' ').trim().slice(0, 140);
+/** Converte a marcação do WhatsApp (*negrito* _itálico_ ~riscado~) em HTML do Telegram. */
+export function whatsParaHtml(texto) {
+  return escHtml(texto)
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:]|$)/gm, '$1<b>$2</b>')
+    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:]|$)/gm, '$1<i>$2</i>')
+    .replace(/(^|[\s(])~([^~\n]+)~(?=[\s).,!?:]|$)/gm, '$1<s>$2</s>');
 }
 
-/** Texto para WhatsApp (*negrito*, ~riscado~). */
-export function formatarWhatsApp(o) {
-  const l = [];
-  l.push(`🔥 *${limparTitulo(o.titulo)}*`);
-  l.push('');
-  if (o.precoDe && o.precoPor && o.precoDe > o.precoPor) l.push(`~De ${brl(o.precoDe)}~`);
-  if (o.precoPor) l.push(`💰 *Por ${brl(o.precoPor)}*${o.desconto ? `  (-${o.desconto}%)` : ''}`);
-  if (o.cupom) l.push(`🎟️ Cupom: *${o.cupom}*`);
-  if (o.obs) l.push(`ℹ️ ${o.obs}`);
-  l.push('');
-  l.push(`${EMOJI[o.loja] || '🛒'} ${NOMES[o.loja] || 'Loja'}`);
-  l.push(`👉 ${o.link}`);
-  l.push('');
-  l.push('_Preço sujeito a alteração._');
-  return l.join('\n');
+/** Texto para WhatsApp. */
+export function formatarWhatsApp(o, modelo = process.env.MODELO_MENSAGEM) {
+  return aplicarModelo(modelo, o);
 }
 
-/** Legenda em HTML para Telegram. */
-export function formatarTelegram(o) {
-  const l = [];
-  l.push(`🔥 <b>${escHtml(limparTitulo(o.titulo))}</b>`);
-  l.push('');
-  if (o.precoDe && o.precoPor && o.precoDe > o.precoPor) l.push(`<s>De ${brl(o.precoDe)}</s>`);
-  if (o.precoPor) l.push(`💰 <b>Por ${brl(o.precoPor)}</b>${o.desconto ? `  (-${o.desconto}%)` : ''}`);
-  if (o.cupom) l.push(`🎟️ Cupom: <code>${escHtml(o.cupom)}</code>`);
-  if (o.obs) l.push(`ℹ️ ${escHtml(o.obs)}`);
-  l.push('');
-  l.push(`${EMOJI[o.loja] || '🛒'} ${NOMES[o.loja] || 'Loja'}`);
-  l.push('');
-  l.push('<i>Preço sujeito a alteração.</i>');
-  return l.join('\n');
+/** Legenda em HTML para Telegram (o link vai no botão "Comprar agora"). */
+export function formatarTelegram(o, modelo = process.env.MODELO_MENSAGEM) {
+  return whatsParaHtml(aplicarModelo(modelo, o, { semLink: true }));
 }

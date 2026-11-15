@@ -38,6 +38,31 @@ export function lerMensagemAdmin(texto) {
   };
 }
 
+/**
+ * Lê uma mensagem de oferta escrita por outra pessoa (grupo monitorado):
+ * título = primeira linha com texto de verdade; preços = valores "R$"; cupom = palavra após "cupom".
+ */
+export function extrairDeMensagem(texto) {
+  const t = String(texto || '');
+  const precos = [...t.matchAll(/R\$\s*([\d.]+(?:,\d{1,2})?)/gi)].map((m) => lerPreco(m[1])).filter(Boolean);
+  let precoDe = null;
+  let precoPor = null;
+  if (precos.length >= 2) {
+    precoDe = Math.max(...precos);
+    precoPor = Math.min(...precos);
+  } else if (precos.length === 1) precoPor = precos[0];
+  if (precoDe === precoPor) precoDe = null;
+
+  const cupom = (t.match(/cupom\s*[:：-]?\s*\*?([A-Z0-9][A-Z0-9_-]{3,20})\*?/i) || [])[1] || null;
+
+  const titulo = t
+    .split('\n')
+    .map((l) => l.replace(/[*_~`]/g, '').replace(/[\p{Extended_Pictographic}️‍]/gu, '').trim())
+    .find((l) => l.length >= 6 && !/https?:\/\//i.test(l) && !/R\$/i.test(l) && !/^(cupom|link|compre|corre|oferta|promo[cç][aã]o)\b/i.test(l) && /[a-zà-ú]{3}/i.test(l)) || null;
+
+  return { titulo: titulo ? titulo.slice(0, 140) : null, precoDe, precoPor, cupom };
+}
+
 const ENCURTADOS = /^(s\.shopee\.com\.br|shope\.ee|shp\.ee|vt\.tiktok\.com|vm\.tiktok\.com|mercadolivre\.com|mlb\.am)$/;
 
 /** Converte o link para o link de afiliado da loja certa. */
@@ -66,8 +91,10 @@ export async function converterLink(url) {
 }
 
 /** Monta a oferta completa a partir da mensagem do admin. */
-export async function montarOferta(texto) {
+export async function montarOferta(texto, { link: linkForcado, extra = {} } = {}) {
   const manual = lerMensagemAdmin(texto);
+  if (linkForcado) manual.link = linkForcado;
+  for (const [k, v] of Object.entries(extra)) if (manual[k] == null && v != null) manual[k] = v;
   if (!manual.link) throw new Error('Mande um link de produto.');
   const { loja, link, urlProduto } = await converterLink(manual.link);
 
@@ -90,6 +117,8 @@ export async function montarOferta(texto) {
     cupom: manual.cupom,
     obs: manual.obs,
     imagem: manual.imagem || auto.imagem || null,
+    nota: auto.nota ?? null,
+    vendas: auto.vendas ?? null,
     link,
     chave: auto.chave || `${loja}:${urlProduto.split('?')[0]}`,
     criadaEm: new Date().toISOString(),

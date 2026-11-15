@@ -40,14 +40,16 @@ test('formata para WhatsApp', () => {
   assert.match(t, /\*Fone <Bluetooth>\*/);
   assert.match(t, /~De R\$\s?100,00~/);
   assert.match(t, /Por R\$\s?49,90/);
-  assert.match(t, /-50%/);
+  assert.match(t, /50% OFF/);
+  assert.match(t, /Cupom: \*ACHADO\*/);
   assert.match(t, /https:\/\/s\.shopee\.com\.br\/x/);
 });
 
 test('formata para Telegram escapando HTML', () => {
   const t = formatarTelegram(oferta);
   assert.match(t, /Fone &lt;Bluetooth&gt;/);
-  assert.match(t, /<code>ACHADO<\/code>/);
+  assert.match(t, /<b>ACHADO<\/b>/);
+  assert.doesNotMatch(t, /s\.shopee\.com\.br/); // no Telegram o link vai no botão
 });
 
 test('fila: adiciona, evita duplicada, marca postada e conta o dia', () => {
