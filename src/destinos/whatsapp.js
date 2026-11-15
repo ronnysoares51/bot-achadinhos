@@ -137,10 +137,15 @@ async function conectar(opcoes) {
       try {
         const jid = m.key?.remoteJid;
         if (!jid || m.key.fromMe || !(await monitorado(jid))) continue;
-        const msg = m.message || {};
+        const msg = baileys.normalizeMessageContent(m.message) || {};
         const texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption;
         if (!texto) continue;
-        const baixarFoto = msg.imageMessage && (async () => {
+        const previa = msg.extendedTextMessage?.jpegThumbnail;
+        const baixarFoto = (msg.imageMessage || previa?.length) && (async () => {
+          if (!msg.imageMessage) {
+            console.log('[clone] Capturada imagem da previa do link.');
+            return Buffer.from(previa).toString('base64');
+          }
           const limite = 5 * 1024 * 1024;
           if (Number(msg.imageMessage.fileLength) > limite) return null;
           const stream = await baileys.downloadContentFromMessage(msg.imageMessage, 'image');
