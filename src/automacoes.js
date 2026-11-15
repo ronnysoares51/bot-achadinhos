@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from './config.js';
+import { CATEGORIAS, categoriasDe } from './categorias.js';
 
 /**
  * Automações: cada uma é uma regra que pega ofertas de uma ou mais fontes, filtra e envia
@@ -58,6 +59,8 @@ export function normalizar(a = {}) {
       porPalavra: numero(a.buscaShopee?.porPalavra, 5, 1, 20),
     },
     lojas: lista(a.lojas).filter((l) => LOJAS.includes(l)),
+    categorias: lista(a.categorias).filter((c) => c in CATEGORIAS),
+    origens: lista(a.origens),
     precoMin: numero(a.precoMin, null, 0),
     precoMax: numero(a.precoMax, null, 0),
     descontoMin: numero(a.descontoMin, 0, 0, 95),
@@ -151,6 +154,11 @@ export function aceita(oferta, a, { ignorarHistorico = false } = {}) {
   if (oferta.automacao && oferta.automacao !== a.id) return { ok: false, motivo: 'de outra automação' };
   if (!a.fontes.includes(fonte)) return { ok: false, motivo: `fonte ${fonte} não usada` };
   if (a.lojas.length && !a.lojas.includes(oferta.loja)) return { ok: false, motivo: 'loja fora do filtro' };
+  if (fonte === 'clone' && a.origens.length && !a.origens.includes(oferta.origemId) && !a.origens.includes(oferta.origem)) return { ok: false, motivo: 'clone de outro grupo' };
+  if (a.categorias.length) {
+    const cats = categoriasDe(oferta.titulo);
+    if (!a.categorias.some((c) => cats.includes(c))) return { ok: false, motivo: 'fora das categorias' };
+  }
   const preco = Number(oferta.precoPor) || null;
   if (a.precoMin != null && (preco == null || preco < a.precoMin)) return { ok: false, motivo: 'preço abaixo do mínimo' };
   if (a.precoMax != null && (preco == null || preco > a.precoMax)) return { ok: false, motivo: 'preço acima do máximo' };

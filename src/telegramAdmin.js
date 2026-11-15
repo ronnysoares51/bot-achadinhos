@@ -8,6 +8,8 @@ import { publicar, diaLocal } from './publicar.js';
 import { registrarPostManual } from './agendador.js';
 import { NOMES } from './lojas/index.js';
 import { listarAutomacoes, enviadosHoje } from './automacoes.js';
+import { processarMensagem } from './clone.js';
+import { registrarChatTelegram } from './telegramChats.js';
 
 // Painel no privado do Telegram: o admin cola o link, vê a prévia e decide (postar, fila ou descartar).
 const pendentes = new Map();
@@ -37,8 +39,22 @@ Comandos:
 /grupos – grupos do WhatsApp (nome e ID)
 /status – situação do bot`;
 
+/** Mensagem de grupo/canal do Telegram: guarda o chat na lista e clona se ele estiver marcado. */
+async function clonarDoTelegram(msg) {
+  registrarChatTelegram(msg.chat);
+  const id = String(msg.chat.id);
+  if (!config.clone.gruposTelegram.includes(id)) return false;
+  const texto = msg.text || msg.caption || '';
+  const links = (msg.entities || msg.caption_entities || []).filter((e) => e.type === 'text_link').map((e) => e.url);
+  const nomeGrupo = msg.chat.title || id;
+  const r = await processarMensagem({ texto: [texto, ...links].join('\n'), nomeGrupo, grupo: id }, { aprovar: enviarParaAprovacao, avisar: avisarAdmins }).catch((e) => ({ ok: false, motivo: e.message }));
+  if (r.ok) console.log(`[clone] Telegram ${nomeGrupo}: oferta enviada para ${r.destino}`);
+  return true;
+}
+
 async function tratarMensagem(msg) {
   const chatId = msg.chat.id;
+  if (msg.chat.type !== 'private' && (await clonarDoTelegram(msg))) return;
   if (!ehAdmin(msg.from?.id)) {
     if (msg.chat.type === 'private') await responder(chatId, `Seu ID é <code>${msg.from?.id}</code>. Coloque-o em TELEGRAM_ADMINS para usar o bot.`);
     return;
@@ -162,10 +178,12 @@ export async function iniciarPainelTelegram() {
 
   for (;;) {
     try {
-      const updates = await chamar('getUpdates', { offset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
+      const updates = await chamar('getUpdates', { offset, timeout: 30, allowed_updates: ['message', 'channel_post', 'my_chat_member', 'callback_query'] });
       for (const u of updates) {
         offset = u.update_id + 1;
         if (u.message) tratarMensagem(u.message).catch((e) => console.error('[telegram]', e.message));
+        if (u.channel_post) clonarDoTelegram(u.channel_post).catch((e) => console.error('[telegram] clone:', e.message));
+        if (u.my_chat_member) registrarChatTelegram(u.my_chat_member.chat, { saiu: ['left', 'kicked'].includes(u.my_chat_member.new_chat_member?.status) });
         if (u.callback_query) tratarBotao(u.callback_query).catch((e) => console.error('[telegram]', e.message));
       }
     } catch (e) {

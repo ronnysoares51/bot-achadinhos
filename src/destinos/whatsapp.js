@@ -198,3 +198,33 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
   }
   return resultados;
 }
+
+/** Extrai o código de um link de convite (chat.whatsapp.com/XXXX) ou devolve null. */
+export function codigoConvite(link) {
+  const m = String(link || '').trim().match(/(?:chat\.whatsapp\.com\/(?:invite\/)?)?([A-Za-z0-9]{18,32})\/?$/);
+  return m ? m[1] : null;
+}
+
+/** O número do bot entra no grupo pelo link de convite. Devolve { id, nome }. */
+export async function entrarPorConvite(link) {
+  if (!sock || !conectado) throw new Error('WhatsApp não conectado.');
+  const codigo = codigoConvite(link);
+  if (!codigo) throw new Error('Link de convite inválido. Ele tem o formato https://chat.whatsapp.com/XXXXXXXX');
+  let info = null;
+  try {
+    info = await sock.groupGetInviteInfo(codigo);
+  } catch {
+    throw new Error('O WhatsApp não reconheceu esse convite (link expirado ou revogado).');
+  }
+  let id = info?.id;
+  try {
+    id = (await sock.groupAcceptInvite(codigo)) || id;
+  } catch (e) {
+    // já participante: segue com o ID do convite
+    if (!id) throw new Error(`Não consegui entrar no grupo: ${e.message}`);
+  }
+  if (id && !id.endsWith('@g.us')) id = `${id}@g.us`;
+  cacheGrupos.quando = 0;
+  if (id) nomesGrupos.set(id, info?.subject || id);
+  return { id, nome: info?.subject || id, aprovacao: Boolean(info?.joinApprovalMode) };
+}

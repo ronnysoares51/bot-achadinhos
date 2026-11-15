@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ARQUIVO_CONFIG, lerConfigSalva } from './config.js';
-import { statusWhatsApp, listarGrupos, desconectarWhatsApp } from './destinos/whatsapp.js';
+import { statusWhatsApp, listarGrupos, desconectarWhatsApp, entrarPorConvite } from './destinos/whatsapp.js';
+import { listarChatsTelegram } from './telegramChats.js';
 import { listarAutomacoes, obterAutomacao, salvarAutomacao, excluirAutomacao, alternarAutomacao, normalizar } from './automacoes.js';
 import { listar, postsHoje, listarEnviados, clonesHoje, remover } from './fila.js';
 import { publicar } from './publicar.js';
@@ -199,20 +200,44 @@ export function iniciarPainelWeb() {
       if (url.pathname === '/clone' && req.method === 'GET') {
         const wa = statusWhatsApp();
         const grupos = wa.conectado ? await listarGrupos().catch(() => null) : null;
-        return enviar(200, telaClone({ grupos, selecionados: config.clone.grupos, automatico: config.clone.automatico, maxHora: config.clone.maxHora, waAtivo: wa.ativo, msg: url.searchParams.get('msg') }));
+        return enviar(200, telaClone({
+          grupos, selecionados: config.clone.grupos, automatico: config.clone.automatico, maxHora: config.clone.maxHora, waAtivo: wa.ativo, waConectado: wa.conectado,
+          chatsTelegram: listarChatsTelegram(), selecionadosTelegram: config.clone.gruposTelegram, destinosTelegram: listarAutomacoes().flatMap((a) => a.destinos.telegram),
+          msg: url.searchParams.get('msg'), erro: url.searchParams.get('erro'),
+        }));
+      }
+
+      if (url.pathname === '/clone/entrar' && req.method === 'POST') {
+        const f = await lerForm(req);
+        try {
+          const g = await entrarPorConvite(f.get('convite'));
+          const grupos = [...new Set([...config.clone.grupos, g.id])];
+          const atual = lerConfigSalva();
+          atual.WHATSAPP_MONITORAR = grupos.join(',');
+          fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
+          fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
+          config.clone.grupos = grupos;
+          const msg = g.aprovacao
+            ? `Pedido enviado para entrar em "${g.nome}". Quando o administrador aprovar, as ofertas de lá começam a ser clonadas.`
+            : `O número do bot entrou em "${g.nome}" e o grupo já está marcado para clonar.`;
+          return enviar(303, '', { Location: '/clone?msg=' + encodeURIComponent(msg) });
+        } catch (e) {
+          return enviar(303, '', { Location: '/clone?erro=' + encodeURIComponent(e.message) });
+        }
       }
 
       if (url.pathname === '/clone' && req.method === 'POST') {
         const f = await lerForm(req);
         const grupos = [...f.getAll('grupos'), ...String(f.get('extras') || '').split(',')].map((g) => g.trim()).filter(Boolean);
+        const gruposTelegram = [...f.getAll('grupos_tg'), ...String(f.get('tg_extra') || '').split(/[,\s]+/)].map((g) => g.trim()).filter(Boolean);
         const automatico = f.getAll('automatico').includes('true');
         const maxHora = Math.max(1, Math.min(120, Number(f.get('maxHora')) || 10));
         const atual = lerConfigSalva();
-        Object.assign(atual, { WHATSAPP_MONITORAR: grupos.join(','), CLONE_AUTOMATICO: String(automatico), CLONE_MAX_HORA: String(maxHora) });
+        Object.assign(atual, { WHATSAPP_MONITORAR: grupos.join(','), TELEGRAM_MONITORAR: [...new Set(gruposTelegram)].join(','), CLONE_AUTOMATICO: String(automatico), CLONE_MAX_HORA: String(maxHora) });
         fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
         fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
-        Object.assign(config.clone, { grupos, automatico, maxHora }); // vale na hora, sem reiniciar
-        return enviar(303, '', { Location: '/clone?msg=' + encodeURIComponent(`Salvo: ${grupos.length} grupo(s) monitorado(s).`) });
+        Object.assign(config.clone, { grupos, gruposTelegram: [...new Set(gruposTelegram)], automatico, maxHora }); // vale na hora, sem reiniciar
+        return enviar(303, '', { Location: '/clone?msg=' + encodeURIComponent(`Salvo: ${grupos.length} grupo(s) do WhatsApp e ${config.clone.gruposTelegram.length} do Telegram sendo clonados.`) });
       }
 
       if (url.pathname === '/lojas' && req.method === 'GET') return enviar(200, telaLojas(dadosLojas(url.searchParams.get('msg'))));
@@ -261,7 +286,13 @@ export function iniciarPainelWeb() {
         const wa = statusWhatsApp();
         const gruposWa = wa.conectado ? await listarGrupos({ usarCache: true }).catch(() => null) : null;
         const a = existente || normalizar({ nome: '', fontes: ['manual', 'clone'], dias: [0, 1, 2, 3, 4, 5, 6] });
-        return enviar(200, telaAutomacao({ a, nova: !existente, gruposWa, waAtivo: wa.ativo, modeloPadrao: process.env.MODELO_MENSAGEM || MODELO_PADRAO }));
+        const nomesWa = new Map((gruposWa || []).map((g) => [g.id, g.nome]));
+        const nomesTg = new Map(listarChatsTelegram().map((c) => [c.id, c.nome]));
+        const gruposClone = [
+          ...config.clone.grupos.map((g) => ({ id: g, nome: nomesWa.get(g) || g, rede: 'WhatsApp' })),
+          ...config.clone.gruposTelegram.map((g) => ({ id: g, nome: nomesTg.get(g) || g, rede: 'Telegram' })),
+        ];
+        return enviar(200, telaAutomacao({ a, nova: !existente, gruposWa, gruposClone, waAtivo: wa.ativo, modeloPadrao: process.env.MODELO_MENSAGEM || MODELO_PADRAO }));
       }
 
       if (url.pathname === '/automacao' && req.method === 'POST') {
@@ -281,6 +312,8 @@ export function iniciarPainelWeb() {
           fontes: f.getAll('fontes'),
           buscaShopee: { palavras: f.get('shopee_palavras'), descontoMin: f.get('shopee_desconto'), notaMin: f.get('shopee_nota'), intervaloHoras: f.get('shopee_intervalo'), porPalavra: f.get('shopee_por_palavra') },
           lojas: lojas.length === 4 ? [] : lojas,
+          categorias: f.getAll('categorias'),
+          origens: f.getAll('origens'),
           precoMin: f.get('precoMin'),
           precoMax: f.get('precoMax'),
           descontoMin: f.get('descontoMin'),

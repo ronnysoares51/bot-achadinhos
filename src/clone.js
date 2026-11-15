@@ -37,7 +37,7 @@ function dentroDoLimite(agora = Date.now()) {
  * Processa uma mensagem de grupo monitorado.
  * aprovar(oferta, origem): manda para o admin aprovar (modo manual).
  */
-export async function processarMensagem({ texto, nomeGrupo }, { aprovar, avisar } = {}) {
+export async function processarMensagem({ texto, nomeGrupo, grupo }, { aprovar, avisar } = {}) {
   const links = extrairLinks(texto).filter((l) => detectarLoja(l));
   if (!links.length) return { ok: false, motivo: 'sem link de loja' };
   if (!dentroDoLimite()) return { ok: false, motivo: 'limite por hora atingido' };
@@ -50,11 +50,11 @@ export async function processarMensagem({ texto, nomeGrupo }, { aprovar, avisar 
     recentes.push(Date.now());
     registrarClone(nomeGrupo);
     if (config.clone.automatico) {
-      adicionar({ ...oferta, fonte: 'clone', origem: nomeGrupo });
+      adicionar({ ...oferta, fonte: 'clone', origem: nomeGrupo, origemId: grupo });
       avisar?.(`🧲 Clone: "${oferta.titulo}" (de ${nomeGrupo}) entrou na fila.`);
       return { ok: true, destino: 'fila' };
     }
-    await aprovar?.(oferta, nomeGrupo);
+    await aprovar?.({ ...oferta, fonte: 'clone', origem: nomeGrupo, origemId: grupo }, nomeGrupo);
     return { ok: true, destino: 'aprovacao' };
   }
   return { ok: false, motivo: 'nenhum link pode virar seu' };

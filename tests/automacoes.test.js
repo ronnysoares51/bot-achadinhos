@@ -94,3 +94,16 @@ test('migração: configuração antiga vira a automação "Principal"', () => {
   assert.deepEqual(a.fontes, ['manual', 'clone', 'shopee']);
   assert.equal(aut.migrarConfiguracaoAntiga(cfg), null, 'só migra uma vez');
 });
+
+test('Categorias: classifica pelo título e a automação filtra', async () => {
+  const { categoriasDe, buscaDasCategorias } = await import('../src/categorias.js');
+  const { normalizar, aceita } = await import('../src/automacoes.js');
+  assert.deepEqual(categoriasDe('Apple iPhone 15 128GB'), ['iphone', 'celulares']);
+  assert.deepEqual(categoriasDe('Tapete Sala Grande'), ['casa']);
+  assert.ok(buscaDasCategorias(['pet']).includes('racao'));
+  const a = normalizar({ fontes: ['manual', 'clone'], categorias: ['modaFeminina', 'infantil'], origens: ['g1@g.us'] });
+  assert.equal(aceita({ titulo: 'Vestido Feminino Midi', loja: 'shopee', chave: 'x1' }, a).ok, true);
+  assert.equal(aceita({ titulo: 'Air Fryer 4L', loja: 'shopee', chave: 'x2' }, a).motivo, 'fora das categorias');
+  assert.equal(aceita({ titulo: 'Body Bebê Menina', fonte: 'clone', origemId: 'g2@g.us', chave: 'x3' }, a).motivo, 'clone de outro grupo');
+  assert.equal(aceita({ titulo: 'Body Bebê Menina', fonte: 'clone', origemId: 'g1@g.us', chave: 'x4' }, a).ok, true);
+});

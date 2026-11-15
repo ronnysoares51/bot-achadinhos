@@ -44,6 +44,8 @@ export const config = {
   clone: {
     // Grupos de ofertas de outras pessoas que o número do bot acompanha (IDs ou nomes).
     grupos: lista(process.env.WHATSAPP_MONITORAR),
+    // Grupos/canais do Telegram de outras pessoas onde o bot foi adicionado (IDs).
+    gruposTelegram: lista(process.env.TELEGRAM_MONITORAR),
     // true = vai direto para a fila; false = manda para você aprovar no Telegram.
     automatico: process.env.CLONE_AUTOMATICO === 'true',
     maxHora: num(process.env.CLONE_MAX_HORA, 10),

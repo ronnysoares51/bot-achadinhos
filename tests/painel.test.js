@@ -135,5 +135,5 @@ test('Clone: salva grupos escolhidos e vale na hora', async () => {
   assert.equal(config.clone.automatico, true);
   assert.equal(config.clone.maxHora, 30);
   const html = await (await fetch(`${base}/clone`, { headers: { cookie } })).text();
-  assert.match(html, /Grupos para clonar/);
+  assert.match(html, /Grupos do WhatsApp para clonar/);
 });

@@ -3,6 +3,7 @@ import { listar, adicionar, limparFila } from './fila.js';
 import { publicarNaAutomacao, diaLocal, horaLocal, diaSemanaLocal } from './publicar.js';
 import { buscarOfertasShopee, shopeeConfigurada } from './lojas/shopee.js';
 import { listarAutomacoes, aceita, podePostar, registrarBusca } from './automacoes.js';
+import { buscaDasCategorias } from './categorias.js';
 
 let ocupado = false;
 
@@ -18,11 +19,12 @@ async function buscasShopee(automacoes, avisar) {
   if (!shopeeConfigurada()) return;
   for (const a of automacoes) {
     const b = a.buscaShopee;
-    if (!a.ativa || !a.fontes.includes('shopee') || !b.palavras.length) continue;
+    const palavras = b.palavras.length ? b.palavras : buscaDasCategorias(a.categorias);
+    if (!a.ativa || !a.fontes.includes('shopee') || !palavras.length) continue;
     if (Date.now() - a.estado.ultimaBusca < b.intervaloHoras * 3600_000) continue;
     registrarBusca(a.id);
     let novas = 0;
-    for (const palavra of b.palavras) {
+    for (const palavra of palavras) {
       try {
         const ofertas = escolherOfertas(await buscarOfertasShopee(palavra), b);
         for (const o of ofertas.slice(0, b.porPalavra)) {

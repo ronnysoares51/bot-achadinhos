@@ -1,6 +1,7 @@
 // Visual do painel web (HTML + CSS sem dependências externas).
 
 import { VARIAVEIS as VARIAVEIS_UI } from './formatar.js';
+import { CATEGORIAS } from './categorias.js';
 
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -384,7 +385,7 @@ function cardAutomacao(a, d) {
       <span>${ic('relogio')}1 a cada ${a.intervaloMin} min · ${a.horaInicio}h–${a.horaFim}h · ${esc(resumoDias(a.dias))}</span>
       <span>${ic('lista')}${a.fontes.map((f) => NOMES_FONTE[f]).join(' + ')}${a.descontoMin ? ` · desconto ≥ ${a.descontoMin}%` : ''}${a.precoMax ? ` · até R$ ${a.precoMax}` : ''}</span>
     </div>
-    <div class="tags">${(a.lojas.length ? a.lojas : Object.keys(NOMES_LOJA)).map((l) => `<span class="tag ${l}">${NOMES_LOJA[l]}</span>`).join('')}</div>
+    <div class="tags">${(a.lojas.length ? a.lojas : Object.keys(NOMES_LOJA)).map((l) => `<span class="tag ${l}">${NOMES_LOJA[l]}</span>`).join('')}${a.categorias.map((c) => `<span class="tag">${esc(CATEGORIAS[c]?.nome || c)}</span>`).join('')}</div>
     <div class="rodape2"><span class="esq">Hoje ${hoje}/${a.maxDia} · último: ${esc(ultimo)}</span>
       <form method="post" action="/automacao/acao" style="display:flex;gap:6px">
         <input type="hidden" name="id" value="${esc(a.id)}">
@@ -436,6 +437,15 @@ export function telaAutomacao(d) {
       ${campo('shopee_intervalo', 'Buscar a cada (horas)', a.buscaShopee.intervaloHoras, { tipo: 'number', extra: 'min="1"' })}
       ${campo('shopee_por_palavra', 'Ofertas por palavra em cada busca', a.buscaShopee.porPalavra, { tipo: 'number', extra: 'min="1" max="20"', ajuda: 'Mais ofertas para ritmos rápidos.' })}
     </div>
+    <div><span class="l">Categorias</span><div class="opcoes" id="cats">
+      ${Object.entries(CATEGORIAS).map(([k, c]) => opcao('categorias', k, c.nome, a.categorias.includes(k))).join('')}
+    </div><span class="ajuda">Marque o que este destino deve postar (ex.: só Moda feminina e Infantil). Nenhuma marcada = todas as categorias. Se a busca da Shopee estiver sem palavras, ela busca pelas categorias marcadas.</span>
+      <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" data-cats="todas">Marcar todas</button><button type="button" class="mini" data-cats="nenhuma">Limpar</button></div>
+      <script>document.querySelectorAll('[data-cats]').forEach(b=>b.addEventListener('click',()=>document.querySelectorAll('#cats input').forEach(i=>i.checked=b.dataset.cats==='todas')));</script></div>
+    <div><span class="l">Clonar só destes grupos</span>
+      ${d.gruposClone?.length ? `<div class="grupos">${d.gruposClone.map((g) => `<label><input type="checkbox" name="origens" value="${esc(g.id)}" ${a.origens.includes(g.id) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${g.rede}</span></label>`).join('')}</div>
+      <span class="ajuda">Vale para ofertas do clone. Nenhum marcado = todos os grupos clonados.</span>`
+        : '<span class="ajuda">Nenhum grupo para clonar ainda. Adicione em <a href="/clone">Clone de ofertas</a>.</span>'}</div>
     <div><span class="l">Lojas</span><div class="opcoes">
       ${Object.entries(NOMES_LOJA).map(([k, v]) => opcao('lojas', k, v, !a.lojas.length || a.lojas.includes(k))).join('')}
     </div><span class="ajuda">Todas marcadas = qualquer loja.</span></div>
@@ -585,7 +595,11 @@ export function telaLojas(d) {
 /** d = { grupos: [{id,nome}] | null, selecionados: [], automatico, maxHora, waAtivo, msg } */
 export function telaClone(d) {
   const sel = new Set(d.selecionados);
+  const selTg = new Set(d.selecionadosTelegram || []);
+  const destinosTg = new Set(d.destinosTelegram || []);
   const extras = d.selecionados.filter((g) => !(d.grupos || []).some((x) => x.id === g || x.nome === g));
+  const chats = (d.chatsTelegram || []).filter((c) => !destinosTg.has(c.id));
+  const extrasTg = [...selTg].filter((id) => !chats.some((c) => c.id === id));
   return pagina('Clone de ofertas', `
 <header class="topo"><div class="in">
   <div class="marca"><div class="logo">${ic('sacola')}</div>Bot de Achadinhos</div>
@@ -593,15 +607,35 @@ export function telaClone(d) {
 </div></header>
 <main>
   <h1>Clone de ofertas</h1>
-  <p class="sub">Marque os grupos de ofertas de outras pessoas que o número do bot vai acompanhar. Cada promoção da <b>Shopee</b> ou do <b>Mercado Livre</b> que aparecer lá vira uma oferta com o <b>seu</b> link.</p>
+  <p class="sub">Escolha grupos de ofertas de outras pessoas, no <b>WhatsApp</b> ou no <b>Telegram</b>. Cada promoção da <b>Shopee</b> ou do <b>Mercado Livre</b> que aparecer lá vira uma oferta com o <b>seu</b> link. Em cada automação você escolhe de quais grupos ela clona e quais categorias posta.</p>
   ${d.msg ? `<div class="aviso ok" role="status">${ic('check')}<div>${esc(d.msg)}</div></div>` : ''}
+  ${d.erro ? `<div class="aviso erro" role="alert">${ic('alerta')}<div>${esc(d.erro)}</div></div>` : ''}
+
+  <section class="card secao" style="padding:18px;display:grid;gap:12px;margin-bottom:16px">
+    <h2 style="margin:0;font-size:18px">Adicionar grupo do WhatsApp pelo link</h2>
+    <p class="ajuda" style="margin:0">Cole o link de convite do grupo que você quer clonar. O número do bot entra no grupo e ele já fica marcado.</p>
+    ${d.waConectado ? `<form method="post" action="/clone/entrar" style="display:flex;gap:8px;flex-wrap:wrap">
+      <input class="in" name="convite" required placeholder="https://chat.whatsapp.com/..." style="flex:1;min-width:240px" aria-label="Link de convite do grupo">
+      <button class="btn">${ic('mais')}<span> Entrar e clonar</span></button>
+    </form>` : `<div class="aviso" style="margin:0">${ic('alerta')}<div>Conecte o WhatsApp do bot na página inicial para adicionar grupos.</div></div>`}
+  </section>
+
   <form method="post" action="/clone" class="card secao" style="padding:18px;display:grid;gap:18px">
-    <div><span class="l">Grupos para clonar</span>
+    <div><span class="l">Grupos do WhatsApp para clonar</span>
     ${d.grupos ? (d.grupos.length ? `<input class="in" id="filtro" placeholder="Buscar grupo pelo nome..." style="margin-bottom:8px">
       <div class="grupos" id="lista">${d.grupos.map((g) => `<label><input type="checkbox" name="grupos" value="${esc(g.id)}" ${sel.has(g.id) || sel.has(g.nome) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${esc(g.id.replace('@g.us', ''))}</span></label>`).join('')}</div>
-      <span class="ajuda">O número do bot precisa estar no grupo. Não marque os seus próprios grupos de destino.</span>` : '<span class="ajuda">O número do bot ainda não está em nenhum grupo. Entre nos grupos que quer clonar e recarregue esta página.</span>')
+      <span class="ajuda">Aparecem os grupos em que o número do bot está. Não marque os seus próprios grupos de destino.</span>` : '<span class="ajuda">O número do bot ainda não está em nenhum grupo. Use o link de convite acima.</span>')
       : `<div class="aviso" style="margin:0">${ic('alerta')}<div>WhatsApp ${d.waAtivo ? 'desconectado' : 'desligado'}: conecte o número do bot na página inicial para ver a lista de grupos.</div></div>`}
     ${extras.length ? `<input type="hidden" name="extras" value="${esc(extras.join(','))}">` : ''}</div>
+
+    <div><span class="l">Grupos e canais do Telegram para clonar</span>
+      ${chats.length ? `<div class="grupos">${chats.map((c) => `<label><input type="checkbox" name="grupos_tg" value="${esc(c.id)}" ${selTg.has(c.id) ? 'checked' : ''}>${esc(c.nome)}<span class="id">${c.tipo}</span></label>`).join('')}</div>`
+        : '<span class="ajuda" style="display:block;margin-bottom:6px">Nenhum grupo ou canal do Telegram ainda.</span>'}
+      <span class="ajuda"><b>Como adicionar:</b> coloque o seu bot no grupo ou canal (num canal, como administrador). Ele aparece aqui sozinho quando chegar a próxima mensagem; recarregue a página. Num grupo, deixe o bot como administrador para ele ler todas as mensagens. O Telegram não deixa um bot entrar sozinho em canais de outras pessoas.</span>
+      <label class="l" for="tg_extra" style="margin-top:12px">IDs de chats do Telegram (opcional)</label>
+      <input class="in" id="tg_extra" name="tg_extra" value="${esc(extrasTg.join(', '))}" placeholder="-100...">
+    </div>
+
     <input type="hidden" name="automatico" value="false">
     <label class="switch"><input type="checkbox" name="automatico" value="true" ${d.automatico ? 'checked' : ''}>Colocar na fila sem me perguntar</label>
     <span class="ajuda" style="margin-top:-10px">Desligado: cada oferta clonada chega no seu Telegram com os botões Postar / Fila / Descartar.</span>
