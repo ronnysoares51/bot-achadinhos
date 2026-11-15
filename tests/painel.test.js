@@ -10,10 +10,10 @@ process.env.PAINEL_PORTA = String(30000 + (process.pid % 20000));
 process.env.TELEGRAM_BOT_TOKEN = '';
 
 const { iniciarPainelWeb } = await import('../src/painel.js');
-iniciarPainelWeb();
+const servidor = iniciarPainelWeb();
 await new Promise((r) => setTimeout(r, 200));
 const base = `http://127.0.0.1:${process.env.PAINEL_PORTA}`;
-after(() => setImmediate(() => process.exit(0)));
+after(() => servidor.close());
 
 test('sem login mostra a tela de senha', async () => {
   const html = await (await fetch(base)).text();
@@ -32,11 +32,20 @@ test('senha certa entra e mostra status e configurações', async () => {
   const cookie = r.headers.get('set-cookie').split(';')[0];
   const html = await (await fetch(base, { headers: { cookie } })).text();
   assert.match(html, /Configurações/);
-  assert.match(html, /falta o token/);
+  assert.match(html, /Falta o token/);
+  assert.match(html, /Primeiros passos/);
   assert.match(html, /TELEGRAM_BOT_TOKEN/);
 });
 
 test('cookie falso não entra', async () => {
   const html = await (await fetch(base, { headers: { cookie: 'sessao=abc' } })).text();
   assert.match(html, /Senha do painel/);
+});
+
+test('mensagem na URL é escapada (sem injeção de HTML)', async () => {
+  const r = await fetch(`${base}/login`, { method: 'POST', body: 'senha=senha-de-teste', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  const cookie = r.headers.get('set-cookie').split(';')[0];
+  const html = await (await fetch(`${base}/?msg=${encodeURIComponent('<script>alert(1)</script>')}`, { headers: { cookie } })).text();
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)/);
 });

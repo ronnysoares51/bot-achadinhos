@@ -7,49 +7,12 @@ import { statusWhatsApp } from './destinos/whatsapp.js';
 import { listar, postsHoje } from './fila.js';
 import { diaLocal } from './publicar.js';
 import { NOMES } from './lojas/index.js';
+import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo } from './painelVisual.js';
+
+export { CAMPOS } from './painelVisual.js';
 
 // Painel web: status, QR do WhatsApp e configurações. Protegido por PAINEL_SENHA.
 
-export const CAMPOS = [
-  ['Telegram', [
-    ['TELEGRAM_BOT_TOKEN', 'Token do bot (@BotFather)', true],
-    ['TELEGRAM_ADMINS', 'IDs dos admins (mande /start ao bot para ver o seu)'],
-    ['TELEGRAM_CANAIS', 'Canais de destino (ex.: @meucanal)'],
-  ]],
-  ['WhatsApp', [
-    ['WHATSAPP_ATIVO', 'Ativo (true/false)'],
-    ['WHATSAPP_GRUPOS', 'IDs dos grupos (use /grupos no Telegram)'],
-    ['WHATSAPP_PAUSA_MIN', 'Pausa mínima entre grupos (s)'],
-    ['WHATSAPP_PAUSA_MAX', 'Pausa máxima entre grupos (s)'],
-  ]],
-  ['Shopee', [
-    ['SHOPEE_APP_ID', 'App ID da Open API'],
-    ['SHOPEE_SECRET', 'Secret da Open API', true],
-    ['SHOPEE_SUB_ID', 'Sub ID dos links'],
-  ]],
-  ['Mercado Livre e Shein', [
-    ['ML_MATT_WORD', 'ML: matt_word (etiqueta)'],
-    ['ML_MATT_TOOL', 'ML: matt_tool'],
-    ['SHEIN_PARAMETROS', 'Shein: parâmetros extras (opcional)'],
-  ]],
-  ['Agendamento', [
-    ['POST_INTERVALO_MIN', 'Intervalo entre posts (min)'],
-    ['POST_HORA_INICIO', 'Hora de início'],
-    ['POST_HORA_FIM', 'Hora de fim'],
-    ['POST_MAX_DIA', 'Máximo de posts por dia'],
-  ]],
-  ['Busca automática na Shopee', [
-    ['AUTO_SHOPEE', 'Ativa (true/false)'],
-    ['AUTO_SHOPEE_PALAVRAS', 'Palavras-chave (separadas por vírgula)'],
-    ['AUTO_SHOPEE_DESCONTO_MIN', 'Desconto mínimo (%)'],
-    ['AUTO_SHOPEE_NOTA_MIN', 'Nota mínima'],
-    ['AUTO_SHOPEE_INTERVALO_H', 'A cada quantas horas'],
-  ]],
-];
-const CHAVES = new Set(CAMPOS.flatMap(([, c]) => c.map(([k]) => k)));
-const SECRETOS = new Set(CAMPOS.flatMap(([, c]) => c.filter((x) => x[2]).map(([k]) => k)));
-
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Segredo de sessão guardado em disco: o login continua valendo depois que o bot reinicia.
 let segredoSessao = null;
 function segredo() {
@@ -90,62 +53,35 @@ function lerCorpo(req) {
   });
 }
 
-const pagina = (titulo, corpo) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${titulo}</title><meta name="robots" content="noindex">
-<style>
-body{font-family:system-ui,sans-serif;background:#f6f5f2;color:#1d1d1b;margin:0}
-main{max-width:760px;margin:0 auto;padding:24px 16px 60px}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px}
-.card{background:#fff;border:1px solid #e4e2dc;border-radius:10px;padding:16px;margin-bottom:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.k{font-size:12px;color:#6b6a65}.v{font-size:20px;font-weight:600}
-label{display:block;font-size:13px;margin:10px 0 4px;color:#3a3935}
-input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d6d3cb;border-radius:7px;font-size:14px}
-button{background:#e8590c;color:#fff;border:0;border-radius:8px;padding:11px 18px;font-size:15px;cursor:pointer}
-.ok{color:#2b8a3e}.ruim{color:#c92a2a}.aviso{background:#fff4e6;border-color:#ffd8a8}
-table{width:100%;border-collapse:collapse;font-size:14px}td{padding:6px 4px;border-top:1px solid #eee}
-img.qr{width:260px;max-width:100%;image-rendering:pixelated}
-</style></head><body><main>${corpo}</main></body></html>`;
-
-function telaLogin(erro) {
-  return pagina('Entrar', `<h1>🛍️ Bot de Achadinhos</h1><div class="card"><form method="post" action="/login">
-  <label>Senha do painel</label><input type="password" name="senha" autofocus>
-  ${erro ? `<p class="ruim">${erro}</p>` : ''}<p><button>Entrar</button></p></form></div>`);
-}
-
-function telaInicio(msg) {
+function dadosInicio(msg) {
   const wa = statusWhatsApp();
   const dia = diaLocal(new Date(), config.agendador.fusoHorario);
   const salvo = lerConfigSalva();
-  const valor = (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? '');
   const temQr = wa.temQr && fs.existsSync(path.join(config.pastaDados, 'whatsapp-qr.png'));
   const fila = listar();
-
-  const waTxt = !wa.ativo ? 'desligado' : wa.conectado ? '<span class="ok">conectado</span>' : '<span class="ruim">desconectado</span>';
-  const tgTxt = config.telegram.token ? '<span class="ok">configurado</span>' : '<span class="ruim">falta o token</span>';
-
-  return pagina('Bot de Achadinhos', `
-  <h1>🛍️ Bot de Achadinhos</h1><div class="k">Mercado Livre · Shopee · Shein · TikTok Shop</div>
-  ${msg ? `<div class="card aviso">${msg}</div>` : ''}
-  <h2>Status</h2>
-  <div class="grid">
-    <div class="card"><div class="k">Telegram</div><div class="v">${tgTxt}</div></div>
-    <div class="card"><div class="k">WhatsApp</div><div class="v">${waTxt}</div></div>
-    <div class="card"><div class="k">Na fila</div><div class="v">${fila.length}</div></div>
-    <div class="card"><div class="k">Posts hoje</div><div class="v">${postsHoje(dia)}/${config.agendador.maxPorDia}</div></div>
-  </div>
-  ${temQr ? `<div class="card"><b>Conecte o WhatsApp</b><p>No celular: WhatsApp → Aparelhos conectados → Conectar aparelho, e escaneie:</p>
-    <img class="qr" src="/qr.png?t=${Date.now()}" alt="QR do WhatsApp"><p class="k">A página atualiza sozinha a cada 20 s.</p>
-    <script>setTimeout(()=>location.reload(),20000)</script></div>` : ''}
-  ${!config.telegram.token ? '<div class="card aviso">Comece preenchendo o <b>token do Telegram</b> abaixo e salvando. Depois mande /start ao bot no Telegram para descobrir seu ID de admin.</div>' : ''}
-  <h2>Fila</h2><div class="card">${fila.length ? `<table>${fila.slice(0, 20).map((o) => `<tr><td>${esc(NOMES[o.loja])}</td><td>${esc(String(o.titulo).slice(0, 70))}</td></tr>`).join('')}</table>` : 'Vazia. Mande links ao bot no privado do Telegram.'}</div>
-  <h2>Configurações</h2>
-  <form method="post" action="/config">
-  ${CAMPOS.map(([grupo, campos]) => `<div class="card"><b>${grupo}</b>${campos.map(([k, rot, sec]) => `
-    <label for="${k}">${rot}${sec && (salvo[k] || process.env[k]) ? ' <span class="k">(já preenchido: deixe vazio para manter)</span>' : ''}</label>
-    <input id="${k}" name="${k}" ${sec ? 'type="password" autocomplete="new-password"' : ''} value="${esc(valor(k))}">`).join('')}</div>`).join('')}
-  <button>Salvar e reiniciar o bot</button></form>
-  <p class="k" style="margin-top:24px"><a href="/sair">Sair</a></p>`);
+  const temShopee = Boolean(config.shopee.appId && config.shopee.secret);
+  return {
+    msg,
+    telegram: { ok: Boolean(config.telegram.token) },
+    whatsapp: wa,
+    temQr,
+    fila,
+    nomes: NOMES,
+    postsHoje: postsHoje(dia),
+    maxDia: config.agendador.maxPorDia,
+    horaInicio: config.agendador.horaInicio,
+    horaFim: config.agendador.horaFim,
+    intervalo: config.agendador.intervaloMin,
+    valor: (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? ''),
+    preenchido: (k) => Boolean(salvo[k] || process.env[k]),
+    passos: [
+      { t: 'Token do Telegram', d: 'Crie o bot no @BotFather e cole o token em Configurações → Telegram.', feito: Boolean(config.telegram.token) },
+      { t: 'Seu ID de admin', d: 'Mande /start ao bot no Telegram e cole o ID que ele responder.', feito: config.telegram.admins.length > 0 },
+      { t: 'Canal de destino', d: 'Adicione o bot como admin do seu canal e informe o @ do canal.', feito: config.telegram.canais.length > 0 },
+      { t: 'Credenciais da Shopee', d: 'App ID e Secret da Open API de afiliados (opcional para as outras lojas).', feito: temShopee },
+      { t: 'WhatsApp', d: 'Ligue "Postar no WhatsApp", salve e escaneie o QR com o número do bot.', feito: wa.ativo && wa.conectado },
+    ],
+  };
 }
 
 /** Sem PAINEL_SENHA, cria uma senha aleatória na primeira vez e guarda em dados/painel-senha.txt. */
@@ -214,17 +150,18 @@ export function iniciarPainelWeb() {
         }
         fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
         fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
-        enviar(200, pagina('Salvo', '<div class="card">✅ Salvo. Reiniciando o bot... <script>setTimeout(()=>location.href="/",6000)</script></div>'));
+        enviar(200, telaSalvo());
         // O Docker (restart: unless-stopped) sobe o bot de novo com a configuração nova.
         setTimeout(() => process.exit(0), 800);
         return;
       }
 
-      return enviar(200, telaInicio(url.searchParams.get('msg')));
+      return enviar(200, telaInicio(dadosInicio(url.searchParams.get('msg'))));
     } catch (e) {
       console.error('[painel]', e);
       return enviar(500, 'Erro interno');
     }
   });
   servidor.listen(config.painel.porta, () => console.log(`[painel] Web em http://0.0.0.0:${config.painel.porta}`));
+  return servidor;
 }
