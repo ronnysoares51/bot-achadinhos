@@ -84,15 +84,19 @@ export async function iniciarWhatsApp(opcoes = {}) {
   });
 }
 
-/** Lista os grupos em que o número está (nome + ID). */
-export async function listarGrupos() {
+let cacheGrupos = { quando: 0, lista: [] };
+
+/** Lista os grupos em que o número está (nome + ID). Guarda por 5 minutos. */
+export async function listarGrupos({ usarCache = false } = {}) {
   if (!sock || !conectado) throw new Error('WhatsApp não conectado.');
+  if (usarCache && Date.now() - cacheGrupos.quando < 5 * 60_000) return cacheGrupos.lista;
   const grupos = await sock.groupFetchAllParticipating();
-  return Object.values(grupos).map((g) => ({ id: g.id, nome: g.subject }));
+  const lista = Object.values(grupos).map((g) => ({ id: g.id, nome: g.subject })).sort((a, b) => a.nome.localeCompare(b.nome));
+  cacheGrupos = { quando: Date.now(), lista };
+  return lista;
 }
 
-async function resolverDestinos() {
-  const desejados = config.whatsapp.grupos;
+async function resolverDestinos(desejados = config.whatsapp.grupos) {
   if (!desejados.length) return [];
   const ids = desejados.filter((g) => g.endsWith('@g.us') || g.endsWith('@newsletter'));
   const nomes = desejados.filter((g) => !ids.includes(g));
@@ -101,14 +105,15 @@ async function resolverDestinos() {
   return [...ids, ...todos.filter((g) => nomes.includes(g.nome)).map((g) => g.id)];
 }
 
-export async function publicarNosGrupos(oferta, texto) {
-  if (!config.whatsapp.ativo) return [];
+export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.grupos, { comImagem = true } = {}) {
+  if (!grupos.length) return [];
+  if (!config.whatsapp.ativo) return [{ destino: 'whatsapp', ok: false, erro: 'WhatsApp desligado nas configurações' }];
   if (!sock || !conectado) return [{ destino: 'whatsapp', ok: false, erro: 'não conectado' }];
   const resultados = [];
-  const destinos = await resolverDestinos();
+  const destinos = await resolverDestinos(grupos);
   for (const [i, jid] of destinos.entries()) {
     try {
-      if (oferta.imagem) await sock.sendMessage(jid, { image: { url: oferta.imagem }, caption: texto });
+      if (comImagem && oferta.imagem) await sock.sendMessage(jid, { image: { url: oferta.imagem }, caption: texto });
       else await sock.sendMessage(jid, { text: texto });
       resultados.push({ destino: `whatsapp:${jid}`, ok: true });
     } catch (e) {

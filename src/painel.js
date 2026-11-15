@@ -3,13 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ARQUIVO_CONFIG, lerConfigSalva } from './config.js';
-import { statusWhatsApp } from './destinos/whatsapp.js';
+import { statusWhatsApp, listarGrupos } from './destinos/whatsapp.js';
+import { listarAutomacoes, obterAutomacao, salvarAutomacao, excluirAutomacao, alternarAutomacao, normalizar } from './automacoes.js';
 import { listar, postsHoje, listarEnviados, clonesHoje, remover } from './fila.js';
 import { publicar } from './publicar.js';
 import { MODELO_PADRAO } from './formatar.js';
 import { diaLocal } from './publicar.js';
 import { NOMES } from './lojas/index.js';
-import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo } from './painelVisual.js';
+import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo, telaAutomacao } from './painelVisual.js';
 
 export { CAMPOS } from './painelVisual.js';
 
@@ -43,6 +44,18 @@ function logado(req) {
   return Boolean(c.sessao) && iguais(c.sessao, tokenSessao());
 }
 
+function lerForm(req) {
+  return new Promise((ok, erro) => {
+    let d = '';
+    req.on('data', (c) => {
+      d += c;
+      if (d.length > 2e5) req.destroy();
+    });
+    req.on('end', () => ok(new URLSearchParams(d)));
+    req.on('error', erro);
+  });
+}
+
 function lerCorpo(req) {
   return new Promise((ok, erro) => {
     let d = '';
@@ -69,13 +82,15 @@ function dadosInicio(msg) {
     temQr,
     fila,
     nomes: NOMES,
-    postsHoje: postsHoje(dia),
-    maxDia: config.agendador.maxPorDia,
+    postsHoje: listarAutomacoes().reduce((t, a) => t + (a.estado.dia === dia ? a.estado.enviadosDia : 0), 0),
+    maxDia: listarAutomacoes().filter((a) => a.ativa).reduce((t, a) => t + a.maxDia, 0) || config.agendador.maxPorDia,
     horaInicio: config.agendador.horaInicio,
     horaFim: config.agendador.horaFim,
     intervalo: config.agendador.intervaloMin,
     valor: (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? (k === 'MODELO_MENSAGEM' ? MODELO_PADRAO : '')),
     enviados: listarEnviados(),
+    automacoes: listarAutomacoes(),
+    diaHoje: diaLocal(new Date(), config.agendador.fusoHorario),
     cloneAtivo: config.clone.grupos.length > 0,
     clonesHoje: clonesHoje(),
     hora: (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: config.agendador.fusoHorario, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
@@ -83,7 +98,7 @@ function dadosInicio(msg) {
     passos: [
       { t: 'Token do Telegram', d: 'Crie o bot no @BotFather e cole o token em Configurações → Telegram.', feito: Boolean(config.telegram.token) },
       { t: 'Seu ID de admin', d: 'Mande /start ao bot no Telegram e cole o ID que ele responder.', feito: config.telegram.admins.length > 0 },
-      { t: 'Canal de destino', d: 'Adicione o bot como admin do seu canal e informe o @ do canal.', feito: config.telegram.canais.length > 0 },
+      { t: 'Primeira automação', d: 'Em Automações → Nova automação: escolha o canal/grupos, as ofertas e o ritmo.', feito: listarAutomacoes().some((a) => a.destinos.telegram.length || a.destinos.whatsapp.length) },
       { t: 'Credenciais da Shopee', d: 'App ID e Secret da Open API de afiliados (opcional para as outras lojas).', feito: temShopee },
       { t: 'WhatsApp', d: 'Ligue "Postar no WhatsApp", salve e escaneie o QR com o número do bot.', feito: wa.ativo && wa.conectado },
     ],
@@ -143,6 +158,61 @@ export function iniciarPainelWeb() {
         if (!fs.existsSync(png)) return enviar(404, 'sem QR');
         res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
         return fs.createReadStream(png).pipe(res);
+      }
+
+      if (url.pathname === '/automacao' && req.method === 'GET') {
+        const id = url.searchParams.get('id');
+        const existente = id ? obterAutomacao(id) : null;
+        if (id && !existente) return enviar(303, '', { Location: '/?msg=' + encodeURIComponent('Automação não encontrada.') });
+        const wa = statusWhatsApp();
+        const gruposWa = wa.conectado ? await listarGrupos({ usarCache: true }).catch(() => null) : null;
+        const a = existente || normalizar({ nome: '', fontes: ['manual', 'clone'], dias: [0, 1, 2, 3, 4, 5, 6] });
+        return enviar(200, telaAutomacao({ a, nova: !existente, gruposWa, waAtivo: wa.ativo, modeloPadrao: process.env.MODELO_MENSAGEM || MODELO_PADRAO }));
+      }
+
+      if (url.pathname === '/automacao' && req.method === 'POST') {
+        const f = await lerForm(req);
+        const anterior = f.get('id') ? obterAutomacao(f.get('id')) : null;
+        const modeloPadrao = process.env.MODELO_MENSAGEM || MODELO_PADRAO;
+        const modelo = (f.get('modelo') || '').replace(/\r\n/g, '\n').trim();
+        const lojas = f.getAll('lojas');
+        const a = salvarAutomacao({
+          id: anterior?.id,
+          nome: f.get('nome') || 'Automação',
+          ativa: f.getAll('ativa').includes('true'),
+          destinos: {
+            telegram: f.get('telegram') || '',
+            whatsapp: [...f.getAll('whatsapp'), ...(f.get('whatsapp_extra') || '').split(/[,\s]+/)].filter(Boolean),
+          },
+          fontes: f.getAll('fontes'),
+          buscaShopee: { palavras: f.get('shopee_palavras'), descontoMin: f.get('shopee_desconto'), notaMin: f.get('shopee_nota'), intervaloHoras: f.get('shopee_intervalo') },
+          lojas: lojas.length === 4 ? [] : lojas,
+          precoMin: f.get('precoMin'),
+          precoMax: f.get('precoMax'),
+          descontoMin: f.get('descontoMin'),
+          incluir: f.get('incluir'),
+          excluir: f.get('excluir'),
+          intervaloMin: f.get('intervaloMin'),
+          maxDia: f.get('maxDia'),
+          horaInicio: f.get('horaInicio'),
+          horaFim: f.get('horaFim'),
+          dias: f.getAll('dias'),
+          formato: f.get('formato'),
+          modelo: modelo === modeloPadrao.trim() ? '' : modelo,
+        });
+        const aviso = !a.destinos.telegram.length && !a.destinos.whatsapp.length ? ' Atenção: ela ainda não tem nenhum destino.' : '';
+        return enviar(303, '', { Location: '/?msg=' + encodeURIComponent(`Automação "${a.nome}" salva.${aviso}`) + '#automacoes' });
+      }
+
+      if (url.pathname === '/automacao/acao' && req.method === 'POST') {
+        const { id, acao } = await lerCorpo(req);
+        let msg = 'Automação não encontrada.';
+        if (acao === 'excluir' && excluirAutomacao(id)) msg = 'Automação excluída.';
+        if (acao === 'alternar') {
+          const a = alternarAutomacao(id);
+          if (a) msg = `Automação "${a.nome}" ${a.ativa ? 'ligada' : 'desligada'}.`;
+        }
+        return enviar(303, '', { Location: '/?msg=' + encodeURIComponent(msg) + '#automacoes' });
       }
 
       if (url.pathname === '/fila' && req.method === 'POST') {

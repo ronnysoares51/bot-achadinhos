@@ -5,9 +5,12 @@ import { processarMensagem } from './clone.js';
 import { iniciarAgendador } from './agendador.js';
 import { iniciarPainelWeb } from './painel.js';
 import { chamar } from './destinos/telegram.js';
+import { migrarConfiguracaoAntiga } from './automacoes.js';
 
 async function main() {
   console.log('Bot de Achadinhos iniciando...');
+  const migrada = migrarConfiguracaoAntiga();
+  if (migrada) console.log(`[automações] Configuração antiga virou a automação "${migrada.nome}".`);
   iniciarPainelWeb();
 
   if (!config.telegram.token) {

@@ -1,19 +1,10 @@
 import { config } from './config.js';
-import { proxima, postsHoje, adicionar, jaPostada } from './fila.js';
-import { publicar, diaLocal, horaLocal } from './publicar.js';
+import { listar, adicionar, limparFila } from './fila.js';
+import { publicarNaAutomacao, diaLocal, horaLocal, diaSemanaLocal } from './publicar.js';
 import { buscarOfertasShopee, shopeeConfigurada } from './lojas/shopee.js';
+import { listarAutomacoes, aceita, podePostar, registrarBusca } from './automacoes.js';
 
-let ultimoPost = 0;
-let ultimaBusca = 0;
 let ocupado = false;
-
-/** Decide se já pode postar agora (janela de horário, limite diário e intervalo). */
-export function podePostar(agora = new Date(), cfg = config.agendador, totalHoje = 0, ultimo = 0) {
-  const h = horaLocal(agora, cfg.fusoHorario);
-  if (h < cfg.horaInicio || h >= cfg.horaFim) return false;
-  if (totalHoje >= cfg.maxPorDia) return false;
-  return agora.getTime() - ultimo >= cfg.intervaloMin * 60_000;
-}
 
 /** Filtra e ordena ofertas da busca automática da Shopee. */
 export function escolherOfertas(ofertas, { descontoMin, notaMin }) {
@@ -22,39 +13,48 @@ export function escolherOfertas(ofertas, { descontoMin, notaMin }) {
     .sort((a, b) => b.desconto * (b.comissao || 0.01) - a.desconto * (a.comissao || 0.01));
 }
 
-async function buscaAutomatica(avisar) {
-  const a = config.autoShopee;
-  if (!a.ativo || !shopeeConfigurada() || !a.palavras.length) return;
-  if (Date.now() - ultimaBusca < a.intervaloHoras * 3600_000) return;
-  ultimaBusca = Date.now();
-  let novas = 0;
-  for (const palavra of a.palavras) {
-    try {
-      const ofertas = escolherOfertas(await buscarOfertasShopee(palavra), a);
-      for (const o of ofertas.slice(0, 2)) {
-        if (!jaPostada(o.chave) && adicionar({ ...o, criadaEm: new Date().toISOString() })) novas++;
+/** Busca da Shopee de cada automação que usa essa fonte (no intervalo dela). */
+async function buscasShopee(automacoes, avisar) {
+  if (!shopeeConfigurada()) return;
+  for (const a of automacoes) {
+    const b = a.buscaShopee;
+    if (!a.ativa || !a.fontes.includes('shopee') || !b.palavras.length) continue;
+    if (Date.now() - a.estado.ultimaBusca < b.intervaloHoras * 3600_000) continue;
+    registrarBusca(a.id);
+    let novas = 0;
+    for (const palavra of b.palavras) {
+      try {
+        const ofertas = escolherOfertas(await buscarOfertasShopee(palavra), b);
+        for (const o of ofertas.slice(0, 3)) {
+          const item = { ...o, fonte: 'shopee', automacao: a.id };
+          if (aceita(item, a).ok && adicionar(item)) novas++;
+        }
+      } catch (e) {
+        console.error(`[shopee] ${a.nome} / ${palavra}: ${e.message}`);
       }
-    } catch (e) {
-      console.error(`[auto-shopee] ${palavra}: ${e.message}`);
     }
+    if (novas) avisar?.(`🤖 Busca na Shopee (${a.nome}): ${novas} oferta(s) na fila.`);
   }
-  if (novas) avisar?.(`🤖 Busca automática: ${novas} oferta(s) da Shopee entraram na fila. Use /fila para ver.`);
 }
 
 async function ciclo(avisar) {
   if (ocupado) return;
   ocupado = true;
   try {
-    await buscaAutomatica(avisar);
+    const automacoes = listarAutomacoes();
+    await buscasShopee(automacoes, avisar);
     const agora = new Date();
-    const dia = diaLocal(agora, config.agendador.fusoHorario);
-    if (!podePostar(agora, config.agendador, postsHoje(dia), ultimoPost)) return;
-    const oferta = proxima();
-    if (!oferta) return;
-    ultimoPost = Date.now();
-    const res = await publicar(oferta, config.agendador.fusoHorario);
-    const falhas = res.filter((r) => !r.ok);
-    if (falhas.length) avisar?.(`⚠️ Falhas ao postar "${oferta.titulo}":\n${falhas.map((f) => `${f.destino}: ${f.erro}`).join('\n')}`);
+    const fuso = config.agendador.fusoHorario;
+    const momento = { agora, dia: diaLocal(agora, fuso), hora: horaLocal(agora, fuso), diaSemana: diaSemanaLocal(agora, fuso) };
+    for (const a of listarAutomacoes()) {
+      if (!podePostar(a, momento)) continue;
+      const oferta = listar().find((o) => aceita(o, a).ok);
+      if (!oferta) continue;
+      const res = await publicarNaAutomacao(oferta, a);
+      const falhas = res.filter((r) => !r.ok);
+      if (falhas.length) avisar?.(`⚠️ ${a.nome}: falhas ao postar "${oferta.titulo}":\n${falhas.map((f) => `${f.destino}: ${f.erro}`).join('\n')}`);
+    }
+    limparFila(listarAutomacoes(), aceita);
   } catch (e) {
     console.error('[agendador]', e);
   } finally {
@@ -67,6 +67,5 @@ export function iniciarAgendador(avisar) {
   setTimeout(() => ciclo(avisar), 5_000);
 }
 
-export function registrarPostManual() {
-  ultimoPost = Date.now();
-}
+/** Mantido por compatibilidade: o ritmo agora é controlado por automação. */
+export function registrarPostManual() {}

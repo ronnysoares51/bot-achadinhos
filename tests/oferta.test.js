@@ -7,8 +7,7 @@ process.env.PASTA_DADOS = `/tmp/achadinhos-teste-oferta-${process.pid}`;
 const { lerPreco, lerMensagemAdmin, converterLink } = await import('../src/oferta.js');
 const { formatarWhatsApp, formatarTelegram } = await import('../src/formatar.js');
 const fila = await import('../src/fila.js');
-const { podePostar, escolherOfertas } = await import('../src/agendador.js');
-const { horaLocal } = await import('../src/publicar.js');
+const { escolherOfertas } = await import('../src/agendador.js');
 
 test('lê preços em formato brasileiro', () => {
   assert.equal(lerPreco('R$ 1.299,90'), 1299.9);
@@ -63,16 +62,6 @@ test('fila: adiciona, evita duplicada, marca postada e conta o dia', () => {
   assert.equal(fila.jaPostada('shopee:1'), true);
   assert.equal(fila.postsHoje('2026-11-14'), 1);
   assert.equal(fila.postsHoje('2026-11-15'), 0);
-});
-
-test('agendador respeita horário, limite diário e intervalo', () => {
-  const cfg = { intervaloMin: 45, horaInicio: 8, horaFim: 22, maxPorDia: 8, fusoHorario: 'America/Sao_Paulo' };
-  const meioDia = new Date('2026-11-14T15:00:00Z'); // 12h em São Paulo
-  assert.equal(horaLocal(meioDia), 12);
-  assert.equal(podePostar(meioDia, cfg, 0, 0), true);
-  assert.equal(podePostar(meioDia, cfg, 8, 0), false);
-  assert.equal(podePostar(meioDia, cfg, 0, meioDia.getTime() - 10 * 60_000), false);
-  assert.equal(podePostar(new Date('2026-11-14T05:00:00Z'), cfg, 0, 0), false); // 2h da manhã
 });
 
 test('busca automática filtra por desconto e nota', () => {

@@ -30,7 +30,7 @@ export function jaPostada(chave, agora = Date.now()) {
 export function adicionar(oferta) {
   const d = ler();
   if (d.fila.some((o) => o.chave === oferta.chave)) return null;
-  const item = { id: crypto.randomBytes(4).toString('hex'), ...oferta };
+  const item = { id: crypto.randomBytes(4).toString('hex'), fonte: 'manual', criadaEm: new Date().toISOString(), ...oferta };
   d.fila.push(item);
   salvar(d);
   return item;
@@ -52,7 +52,11 @@ export function proxima() {
   return ler().fila[0] || null;
 }
 
-export function marcarPostada(oferta, dia, resultados = []) {
+/**
+ * Registra um envio. Com `automacao`, a oferta continua na fila para as outras automações
+ * (quem decide a remoção é limparFila); sem ela (postar agora), sai da fila.
+ */
+export function marcarPostada(oferta, dia, resultados = [], { automacao = null } = {}) {
   const d = ler();
   d.enviados = [
     {
@@ -62,13 +66,14 @@ export function marcarPostada(oferta, dia, resultados = []) {
       link: oferta.link,
       imagem: oferta.imagem ?? null,
       origem: oferta.origem ?? null,
+      automacao: automacao?.nome ?? null,
       quando: new Date().toISOString(),
       destinos: resultados.filter((r) => r.ok).length,
       falhas: resultados.filter((r) => !r.ok).length,
     },
     ...(d.enviados || []),
   ].slice(0, 100);
-  d.fila = d.fila.filter((o) => o.id !== oferta.id);
+  if (!automacao) d.fila = d.fila.filter((o) => o.id !== oferta.id);
   d.historico[oferta.chave] = Date.now();
   // limpa histórico antigo
   for (const [k, t] of Object.entries(d.historico)) if (Date.now() - t > 30 * 864e5) delete d.historico[k];
@@ -98,4 +103,24 @@ export function registrarClone(origem, dia = new Date().toISOString().slice(0, 1
 export function clonesHoje(dia = new Date().toISOString().slice(0, 10)) {
   const c = ler().clones;
   return c && c.dia === dia ? c.total : 0;
+}
+
+const VALIDADE_HORAS = 48;
+
+/**
+ * Tira da fila o que não serve mais: ofertas vencidas (48 h) e ofertas que todas as
+ * automações interessadas já enviaram. `aceita(oferta, automacao, opcoes)` vem de automacoes.js.
+ */
+export function limparFila(automacoes, aceita, agora = Date.now()) {
+  const d = ler();
+  const antes = d.fila.length;
+  d.fila = d.fila.filter((o) => {
+    const idade = agora - new Date(o.criadaEm || agora).getTime();
+    if (idade > VALIDADE_HORAS * 3600_000) return false;
+    const interessadas = automacoes.filter((a) => a.ativa && aceita(o, a, { ignorarHistorico: true }).ok);
+    if (!interessadas.length) return true;
+    return !interessadas.every((a) => a.estado.enviadas.includes(o.chave));
+  });
+  if (d.fila.length !== antes) salvar(d);
+  return antes - d.fila.length;
 }

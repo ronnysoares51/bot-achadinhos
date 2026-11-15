@@ -49,3 +49,64 @@ test('mensagem na URL é escapada (sem injeção de HTML)', async () => {
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)/);
 });
+
+async function entrar() {
+  const r = await fetch(`${base}/login`, { method: 'POST', body: 'senha=senha-de-teste', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  return r.headers.get('set-cookie').split(';')[0];
+}
+
+test('cria, lista, desliga e exclui automação pelo painel', async () => {
+  const cookie = await entrar();
+  const form = await (await fetch(`${base}/automacao`, { headers: { cookie } })).text();
+  assert.match(form, /Para onde/);
+  assert.match(form, /O que/);
+  assert.match(form, /Quando/);
+  assert.match(form, /Como/);
+
+  const corpo = new URLSearchParams();
+  corpo.append('nome', 'Casa & Cozinha');
+  corpo.append('ativa', 'false');
+  corpo.append('ativa', 'true');
+  corpo.append('telegram', '-1001\n@outro');
+  corpo.append('whatsapp_extra', '123@g.us');
+  for (const f of ['manual', 'shopee']) corpo.append('fontes', f);
+  for (const l of ['shopee', 'mercadolivre']) corpo.append('lojas', l);
+  for (const d of ['1', '2', '3']) corpo.append('dias', d);
+  corpo.append('intervaloMin', '10');
+  corpo.append('maxDia', '20');
+  corpo.append('horaInicio', '9');
+  corpo.append('horaFim', '21');
+  corpo.append('shopee_palavras', 'panela, airfryer');
+  corpo.append('formato', 'texto');
+  const r = await fetch(`${base}/automacao`, { method: 'POST', body: corpo.toString(), headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  assert.equal(r.status, 303);
+
+  const { listarAutomacoes } = await import('../src/automacoes.js');
+  const [a] = listarAutomacoes();
+  assert.equal(a.nome, 'Casa & Cozinha');
+  assert.equal(a.ativa, true);
+  assert.deepEqual(a.destinos.telegram, ['-1001', '@outro']);
+  assert.deepEqual(a.destinos.whatsapp, ['123@g.us']);
+  assert.deepEqual(a.fontes, ['manual', 'shopee']);
+  assert.deepEqual(a.lojas, ['shopee', 'mercadolivre']);
+  assert.deepEqual(a.dias, [1, 2, 3]);
+  assert.equal(a.intervaloMin, 10);
+  assert.deepEqual(a.buscaShopee.palavras, ['panela', 'airfryer']);
+  assert.equal(a.formato, 'texto');
+  assert.equal(a.modelo, '', 'sem modelo próprio = segue o padrão');
+
+  const home = await (await fetch(base, { headers: { cookie } })).text();
+  assert.match(home, /Casa &amp; Cozinha/);
+  assert.match(home, /1 a cada 10 min/);
+
+  const acao = (acao) => fetch(`${base}/automacao/acao`, { method: 'POST', body: `id=${a.id}&acao=${acao}`, headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  await acao('alternar');
+  assert.equal(listarAutomacoes()[0].ativa, false);
+  await acao('excluir');
+  assert.equal(listarAutomacoes().length, 0);
+});
+
+test('rotas de automação exigem login', async () => {
+  const r = await fetch(`${base}/automacao/acao`, { method: 'POST', body: 'id=x&acao=excluir', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  assert.match(await r.text(), /Senha do painel/);
+});

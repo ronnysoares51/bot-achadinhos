@@ -39,11 +39,11 @@ export async function enviar(chatId, { legenda, imagem, teclado }) {
   return chamar('sendMessage', { chat_id: chatId, text: legenda, disable_web_page_preview: false, ...extra });
 }
 
-export async function publicarNosCanais(oferta, legenda) {
+export async function publicarNosCanais(oferta, legenda, canais = config.telegram.canais, { comImagem = true } = {}) {
   const resultados = [];
-  for (const canal of config.telegram.canais) {
+  for (const canal of canais) {
     try {
-      await enviar(canal, { legenda, imagem: oferta.imagem, teclado: botaoComprar(oferta.link) });
+      await enviar(canal, { legenda, imagem: comImagem ? oferta.imagem : null, teclado: botaoComprar(oferta.link) });
       resultados.push({ destino: `telegram:${canal}`, ok: true });
     } catch (e) {
       resultados.push({ destino: `telegram:${canal}`, ok: false, erro: e.message });

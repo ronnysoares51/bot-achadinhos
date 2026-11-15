@@ -49,7 +49,7 @@ export async function processarMensagem({ texto, nomeGrupo }, { aprovar, avisar 
     recentes.push(Date.now());
     registrarClone(nomeGrupo);
     if (config.clone.automatico) {
-      adicionar({ ...oferta, origem: nomeGrupo });
+      adicionar({ ...oferta, fonte: 'clone', origem: nomeGrupo });
       avisar?.(`🧲 Clone: "${oferta.titulo}" (de ${nomeGrupo}) entrou na fila.`);
       return { ok: true, destino: 'fila' };
     }

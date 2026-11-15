@@ -70,6 +70,19 @@ docker compose up -d
 docker compose logs -f   # QR do WhatsApp aparece aqui
 ```
 
+## Automações por grupo
+
+Cada automação é uma regra que trabalha sozinha (painel → **Automações → Nova automação**), em 4 passos:
+
+1. **Para onde**: canais/grupos do Telegram e grupos do WhatsApp (escolhidos numa lista quando o número está conectado).
+2. **O que**: fontes (links que você manda ao bot, clone de ofertas, busca automática na Shopee com palavras-chave próprias) e filtros (lojas, preço mínimo/máximo, desconto mínimo, palavras obrigatórias e proibidas).
+3. **Quando**: uma oferta a cada X minutos, máximo por dia, horário e dias da semana.
+4. **Como**: imagem com texto ou só texto, e modelo de mensagem próprio (ou o padrão).
+
+As ofertas ficam numa fila compartilhada: cada automação pega o que combina com as regras dela e nunca repete a mesma oferta. A oferta sai da fila quando todas as automações interessadas já enviaram (ou depois de 48 h). **Postar agora** (Telegram ou painel) manda para os destinos de todas as automações ligadas.
+
+Na primeira vez com esta versão, os canais, grupos, horários e a busca da Shopee que já estavam configurados viram a automação **Principal**.
+
 ## Recursos inspirados no DisparaPromo
 
 - **Modelo da mensagem**: o texto de cada post é editável no painel, com variáveis (`{titulo}`, `{preco}`, `{preco_antigo}`, `{desconto}`, `{economia}`, `{cupom}`, `{obs}`, `{nota}`, `{vendidos}`, `{loja}`, `{link}`) e prévia ao vivo. Linhas com variável vazia somem sozinhas.

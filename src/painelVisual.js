@@ -24,19 +24,23 @@ const P = {
   texto: '<path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/>',
   envio: '<path d="M12 2v20"/><path d="m17 7-5-5-5 5"/>',
   lixo: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  raio: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+  editar: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  pausa: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  play: '<path d="m6 3 14 9-14 9V3z"/>',
+  mais: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  voltar: '<path d="m15 18-6-6 6-6"/>',
   alerta: '<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]}</svg>`;
 
 export const CAMPOS = [
-  { titulo: 'Telegram', icone: 'send', desc: 'É o painel de comando do bot: você cola os links no privado dele.', campos: [
+  { titulo: 'Telegram', icone: 'send', desc: 'O bot de comando: você cola os links no privado dele. Os canais de destino ficam em cada automação.', campos: [
     { k: 'TELEGRAM_BOT_TOKEN', rot: 'Token do bot', ajuda: 'Crie o bot no @BotFather e cole o token aqui.', tipo: 'segredo' },
     { k: 'TELEGRAM_ADMINS', rot: 'IDs dos admins', ajuda: 'Mande /start ao seu bot: ele responde com o seu ID.' },
-    { k: 'TELEGRAM_CANAIS', rot: 'Canais de destino', ajuda: 'Ex.: @meucanal. O bot precisa ser administrador do canal.' },
   ] },
-  { titulo: 'WhatsApp', icone: 'msg', desc: 'Conexão não oficial: use um número só para o bot.', campos: [
+  { titulo: 'WhatsApp', icone: 'msg', desc: 'Conexão do número do bot (não oficial: use um número só para isso). Os grupos de destino ficam em cada automação.', campos: [
     { k: 'WHATSAPP_ATIVO', rot: 'Postar no WhatsApp', tipo: 'switch' },
-    { k: 'WHATSAPP_GRUPOS', rot: 'IDs dos grupos', ajuda: 'Mande /grupos ao bot no Telegram para ver os IDs.' },
     { k: 'WHATSAPP_PAUSA_MIN', rot: 'Pausa mínima entre grupos', ajuda: 'Em segundos.', tipo: 'numero' },
     { k: 'WHATSAPP_PAUSA_MAX', rot: 'Pausa máxima entre grupos', ajuda: 'Em segundos.', tipo: 'numero' },
   ] },
@@ -45,7 +49,7 @@ export const CAMPOS = [
     { k: 'CLONE_AUTOMATICO', rot: 'Colocar na fila sem me perguntar', tipo: 'switch', ajuda: 'Desligado: cada oferta chega no seu Telegram para você aprovar.' },
     { k: 'CLONE_MAX_HORA', rot: 'Máximo de ofertas clonadas por hora', tipo: 'numero' },
   ] },
-  { titulo: 'Modelo da mensagem', icone: 'texto', desc: 'O texto de cada post. Use as variáveis; linhas com variável vazia somem sozinhas.', campos: [
+  { titulo: 'Modelo padrão da mensagem', icone: 'texto', desc: 'Usado pelas automações que não têm modelo próprio. Linhas com variável vazia somem sozinhas.', campos: [
     { k: 'MODELO_MENSAGEM', rot: 'Modelo', tipo: 'modelo' },
   ] },
   { titulo: 'Shopee', icone: 'loja', desc: 'Gera o link de afiliado sozinho pela API oficial.', campos: [
@@ -57,19 +61,6 @@ export const CAMPOS = [
     { k: 'ML_MATT_WORD', rot: 'Mercado Livre: matt_word', ajuda: 'Sua etiqueta de afiliado (opcional).' },
     { k: 'ML_MATT_TOOL', rot: 'Mercado Livre: matt_tool', ajuda: 'Opcional, junto com o matt_word.' },
     { k: 'SHEIN_PARAMETROS', rot: 'Shein: parâmetros extras', ajuda: 'Opcional. Ex.: url_from=SEU_ID' },
-  ] },
-  { titulo: 'Agendamento', icone: 'relogio', desc: 'Quando e quanto a fila é postada.', campos: [
-    { k: 'POST_INTERVALO_MIN', rot: 'Intervalo entre posts', ajuda: 'Em minutos.', tipo: 'numero' },
-    { k: 'POST_MAX_DIA', rot: 'Máximo de posts por dia', tipo: 'numero' },
-    { k: 'POST_HORA_INICIO', rot: 'Começa às', ajuda: 'Hora (0–23).', tipo: 'numero' },
-    { k: 'POST_HORA_FIM', rot: 'Termina às', ajuda: 'Hora (0–23).', tipo: 'numero' },
-  ] },
-  { titulo: 'Busca automática na Shopee', icone: 'busca', desc: 'Procura ofertas sozinho e coloca na fila.', campos: [
-    { k: 'AUTO_SHOPEE', rot: 'Busca automática ligada', tipo: 'switch' },
-    { k: 'AUTO_SHOPEE_PALAVRAS', rot: 'Palavras-chave', ajuda: 'Separadas por vírgula. Ex.: fone bluetooth, air fryer' },
-    { k: 'AUTO_SHOPEE_DESCONTO_MIN', rot: 'Desconto mínimo (%)', tipo: 'numero' },
-    { k: 'AUTO_SHOPEE_NOTA_MIN', rot: 'Nota mínima', ajuda: 'De 0 a 5.', tipo: 'numero' },
-    { k: 'AUTO_SHOPEE_INTERVALO_H', rot: 'Buscar a cada (horas)', tipo: 'numero' },
   ] },
 ];
 export const CHAVES = new Set(CAMPOS.flatMap((g) => g.campos.map((c) => c.k)));
@@ -144,7 +135,7 @@ details.grupo>summary .txt{flex:1}details.grupo>summary .d{font-size:14px;color:
 details.grupo>summary .seta{transition:transform .2s ease-out;color:var(--muted)}
 details.grupo[open]>summary .seta{transform:rotate(180deg)}
 .campos{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));padding:4px 18px 20px;border-top:1px solid var(--border);padding-top:18px}
-label.l{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+label.l,span.l{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
 .ajuda{display:block;font-size:13px;color:var(--muted);margin-top:5px}
 input.in,textarea.in{width:100%;min-height:44px;padding:10px 12px;font:inherit;font-size:15px;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:10px;transition:border-color .15s,box-shadow .15s}
 input.in:hover{border-color:color-mix(in srgb,var(--muted) 45%,var(--border))}
@@ -184,6 +175,42 @@ textarea.in{min-height:260px;resize:vertical;font-family:ui-monospace,SFMono-Reg
 .quando{font-size:13px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .origem{font-size:12px;color:var(--muted)}
 @media (max-width:640px){.fila li{flex-wrap:wrap}.fila .tit{flex-basis:100%;order:3;white-space:normal}}
+
+.auts{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.aut{padding:18px;display:flex;flex-direction:column;gap:12px}
+.aut .topo2{display:flex;align-items:flex-start;gap:12px}
+.aut h3{margin:0;font-size:17px;line-height:1.3;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.aut .linhas{display:grid;gap:6px;font-size:14px;color:var(--muted)}
+.aut .linhas span{display:flex;gap:8px;align-items:center}
+.aut .linhas .ic{width:16px;height:16px;color:var(--text);opacity:.7}
+.aut .tags{display:flex;gap:6px;flex-wrap:wrap}
+.aut .rodape2{display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding-top:12px;margin-top:auto}
+.aut .rodape2 .esq{flex:1;font-size:13px;color:var(--muted)}
+.aut.off{opacity:.72}
+.novo{display:grid;place-items:center;text-align:center;gap:8px;padding:28px;border:2px dashed var(--border);border-radius:var(--r);color:var(--muted);text-decoration:none;min-height:200px}
+.novo:hover{border-color:var(--primary);color:var(--primary)}
+.novo .ic{width:28px;height:28px}
+a.btn{text-decoration:none}
+.btn.sec{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn.sec:hover{background:var(--surface-2)}
+.passo-cab{display:flex;align-items:center;gap:14px;padding:18px;border-bottom:1px solid var(--border)}
+.passo-cab .n{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--primary);color:var(--on-primary);flex:none}
+.passo-cab h2{font-size:18px}.passo-cab .d{font-size:14px;color:var(--muted)}
+.corpo{padding:18px;display:grid;gap:18px}
+.opcoes{display:flex;flex-wrap:wrap;gap:8px}
+.opcao{position:relative}
+.opcao input{position:absolute;opacity:0;pointer-events:none}
+.opcao span{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;font-size:14px;font-weight:600;transition:all .15s}
+.opcao input:checked+span{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+.opcao input:focus-visible+span{outline:3px solid var(--primary);outline-offset:2px}
+.grupos{display:grid;gap:6px;max-height:300px;overflow:auto;padding:4px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.grupos label{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border-radius:8px;cursor:pointer;font-size:14px}
+.grupos label:hover{background:var(--surface)}
+.grupos input{width:18px;height:18px;accent-color:var(--primary)}
+.grupos .id{font-size:12px;color:var(--muted);margin-left:auto;font-family:ui-monospace,monospace}
+.dupla{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.voltar{display:inline-flex;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;min-height:44px}
+.voltar:hover{color:var(--text)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
 
@@ -273,6 +300,7 @@ export function telaInicio(d) {
     <div class="grade">
       <div class="card stat"><div class="bolha">${ic('send')}</div><div><div class="k">Telegram</div><div class="v">${tg}</div></div></div>
       <div class="card stat"><div class="bolha">${ic('msg')}</div><div><div class="k">WhatsApp</div><div class="v">${wa}</div></div></div>
+      <div class="card stat"><div class="bolha">${ic('raio')}</div><div><div class="k">Automações ligadas</div><div class="v">${d.automacoes.filter((a) => a.ativa).length}<span style="color:var(--muted);font-weight:500;font-size:16px"> / ${d.automacoes.length}</span></div></div></div>
       <div class="card stat"><div class="bolha">${ic('lista')}</div><div><div class="k">Na fila</div><div class="v">${d.fila.length}</div></div></div>
       ${d.cloneAtivo ? `<div class="card stat"><div class="bolha">${ic('ima')}</div><div><div class="k">Clonadas hoje</div><div class="v">${d.clonesHoje}</div></div></div>` : ''}
       <div class="card stat"><div class="bolha">${ic('grafico')}</div><div style="flex:1"><div class="k">Posts hoje</div>
@@ -294,8 +322,15 @@ export function telaInicio(d) {
       <div class="num">${p.feito ? ic('check', '') : i + 1}</div><div><div class="t">${esc(p.t)}</div><div class="d">${esc(p.d)}</div></div></div>`).join('')}</div>
   </section>` : ''}
 
+  <section class="secao" id="automacoes">
+    <div class="cab"><h2>Automações</h2><a class="btn" href="/automacao" style="min-height:44px;padding:0 16px">${ic('mais')}Nova automação</a></div>
+    <div class="auts">${d.automacoes.map((a) => cardAutomacao(a, d)).join('')}
+      ${d.automacoes.length ? '' : `<a class="novo card" href="/automacao">${ic('raio')}<b>Crie sua primeira automação</b><span style="font-size:14px">Escolha para onde vão as ofertas, quais ofertas, quando e como.</span></a>`}
+    </div>
+  </section>
+
   <section class="secao">
-    <div class="cab"><h2>Fila de ofertas</h2><span class="sub" style="margin:0;font-size:14px">${ic('relogio')} ${d.horaInicio}h–${d.horaFim}h, a cada ${d.intervalo} min</span></div>
+    <div class="cab"><h2>Fila de ofertas</h2><span class="sub" style="margin:0;font-size:14px">cada automação pega daqui o que combina com as regras dela</span></div>
     <div class="card">${d.fila.length ? `<ul class="fila">${d.fila.slice(0, 30).map((o) => `<li>
       <span class="tag ${esc(o.loja)}">${esc(d.nomes[o.loja] || o.loja)}</span>
       <span class="tit">${esc(o.titulo)}${o.origem ? `<br><span class="origem">🧲 clonada de ${esc(o.origem)}</span>` : ''}</span>${o.precoPor ? `<span class="preco">${brl(o.precoPor)}</span>` : ''}
@@ -337,4 +372,132 @@ export function telaSalvo() {
   <h1>Configurações salvas</h1><p class="sub">O bot está reiniciando com os novos valores. Você volta ao painel em instantes.</p>
   <script>setTimeout(()=>location.href="/?msg="+encodeURIComponent("Configurações salvas. O bot foi reiniciado."),6000)</script>
   </div></div>`);
+}
+
+const NOMES_LOJA = { mercadolivre: 'Mercado Livre', shopee: 'Shopee', shein: 'Shein', tiktokshop: 'TikTok Shop' };
+const NOMES_FONTE = { manual: 'Seus links', clone: 'Clone', shopee: 'Busca Shopee' };
+const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function resumoDias(dias) {
+  if (dias.length === 7) return 'todos os dias';
+  if (dias.join() === '1,2,3,4,5') return 'seg a sex';
+  if (dias.join() === '0,6') return 'fim de semana';
+  return dias.map((x) => DIAS_CURTOS[x]).join(', ');
+}
+
+function cardAutomacao(a, d) {
+  const hoje = a.estado.dia === d.diaHoje ? a.estado.enviadosDia : 0;
+  const ultimo = a.estado.ultimoEnvio ? d.hora(new Date(a.estado.ultimoEnvio).toISOString()) : 'nunca';
+  const dest = [a.destinos.telegram.length && `${a.destinos.telegram.length} canal(is) Telegram`, a.destinos.whatsapp.length && `${a.destinos.whatsapp.length} grupo(s) WhatsApp`].filter(Boolean).join(' · ') || '<span style="color:var(--bad)">sem destino</span>';
+  return `<div class="card aut ${a.ativa ? '' : 'off'}">
+    <div class="topo2"><h3>${esc(a.nome)}</h3>${a.ativa ? '<span class="pill ok">Ligada</span>' : '<span class="pill off">Desligada</span>'}</div>
+    <div class="linhas">
+      <span>${ic('send')}${dest}</span>
+      <span>${ic('relogio')}1 a cada ${a.intervaloMin} min · ${a.horaInicio}h–${a.horaFim}h · ${esc(resumoDias(a.dias))}</span>
+      <span>${ic('lista')}${a.fontes.map((f) => NOMES_FONTE[f]).join(' + ')}${a.descontoMin ? ` · desconto ≥ ${a.descontoMin}%` : ''}${a.precoMax ? ` · até R$ ${a.precoMax}` : ''}</span>
+    </div>
+    <div class="tags">${(a.lojas.length ? a.lojas : Object.keys(NOMES_LOJA)).map((l) => `<span class="tag ${l}">${NOMES_LOJA[l]}</span>`).join('')}</div>
+    <div class="rodape2"><span class="esq">Hoje ${hoje}/${a.maxDia} · último: ${esc(ultimo)}</span>
+      <form method="post" action="/automacao/acao" style="display:flex;gap:6px">
+        <input type="hidden" name="id" value="${esc(a.id)}">
+        <button class="mini" name="acao" value="alternar" aria-label="${a.ativa ? 'Desligar' : 'Ligar'} automação" title="${a.ativa ? 'Desligar' : 'Ligar'}">${ic(a.ativa ? 'pausa' : 'play')}</button>
+        <a class="mini" href="/automacao?id=${esc(a.id)}" title="Editar" style="text-decoration:none">${ic('editar')}<span>Editar</span></a>
+      </form></div>
+  </div>`;
+}
+
+function opcao(nome, valor, rotulo, marcado, tipo = 'checkbox') {
+  return `<label class="opcao"><input type="${tipo}" name="${nome}" value="${esc(valor)}" ${marcado ? 'checked' : ''}><span>${rotulo}</span></label>`;
+}
+
+function campo(nome, rotulo, valor, { ajuda = '', tipo = 'text', extra = '' } = {}) {
+  return `<div><label class="l" for="${nome}">${rotulo}</label><input class="in" id="${nome}" name="${nome}" type="${tipo}" value="${esc(valor ?? '')}" ${extra}>${ajuda ? `<span class="ajuda">${ajuda}</span>` : ''}</div>`;
+}
+
+/**
+ * d = { a (automação ou null), gruposWa: [{id,nome}] | null, waConectado, modeloPadrao, nova }
+ */
+export function telaAutomacao(d) {
+  const a = d.a;
+  const conhecidos = new Set((d.gruposWa || []).map((g) => g.id));
+  const outrosWa = a.destinos.whatsapp.filter((g) => !conhecidos.has(g));
+  const passo = (n, titulo, desc, corpo) => `<section class="card secao"><div class="passo-cab"><div class="n">${n}</div><div><h2>${titulo}</h2><div class="d">${desc}</div></div></div><div class="corpo">${corpo}</div></section>`;
+
+  const paraOnde = `
+    ${campo('nome', 'Nome da automação', d.nova ? '' : a.nome, { ajuda: 'Só para você reconhecer. Ex.: Achadinhos Casa, Grupo VIP.', extra: 'placeholder="Ex.: Achadinhos da Lanny" required' })}
+    <div><label class="l" for="telegram">Canais ou grupos do Telegram</label>
+      <textarea class="in" id="telegram" name="telegram" style="min-height:70px;font-family:inherit" placeholder="-1003701717478&#10;@meucanal">${esc(a.destinos.telegram.join('\n'))}</textarea>
+      <span class="ajuda">Um por linha. O bot precisa ser administrador do canal.</span></div>
+    <div><span class="l">Grupos do WhatsApp</span>
+      ${d.gruposWa ? (d.gruposWa.length ? `<div class="grupos">${d.gruposWa.map((g) => `<label><input type="checkbox" name="whatsapp" value="${esc(g.id)}" ${a.destinos.whatsapp.includes(g.id) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${esc(g.id.replace('@g.us', ''))}</span></label>`).join('')}</div>` : '<span class="ajuda">O número do bot não está em nenhum grupo.</span>')
+      : `<div class="aviso" style="margin:0">${ic('alerta')}<div>WhatsApp ${d.waAtivo ? 'desconectado' : 'desligado'}: conecte o número (Configurações → WhatsApp) para escolher os grupos aqui. Enquanto isso, dá para colar os IDs abaixo.</div></div>`}
+      <label class="l" for="whatsapp_extra" style="margin-top:12px">IDs de grupos (opcional)</label>
+      <input class="in" id="whatsapp_extra" name="whatsapp_extra" value="${esc(outrosWa.join(', '))}" placeholder="120363...@g.us">
+    </div>`;
+
+  const oQue = `
+    <div><span class="l">De onde vêm as ofertas</span><div class="opcoes">
+      ${opcao('fontes', 'manual', 'Links que eu mando ao bot', a.fontes.includes('manual'))}
+      ${opcao('fontes', 'clone', 'Clone de ofertas', a.fontes.includes('clone'))}
+      ${opcao('fontes', 'shopee', 'Busca automática na Shopee', a.fontes.includes('shopee'))}
+    </div></div>
+    <div class="dupla" id="busca-shopee">
+      ${campo('shopee_palavras', 'Busca Shopee: palavras-chave', a.buscaShopee.palavras.join(', '), { ajuda: 'Separadas por vírgula. Ex.: fone bluetooth, air fryer' })}
+      ${campo('shopee_desconto', 'Busca Shopee: desconto mínimo (%)', a.buscaShopee.descontoMin, { tipo: 'number' })}
+      ${campo('shopee_nota', 'Busca Shopee: nota mínima', a.buscaShopee.notaMin, { tipo: 'number', extra: 'step="0.1" min="0" max="5"' })}
+      ${campo('shopee_intervalo', 'Buscar a cada (horas)', a.buscaShopee.intervaloHoras, { tipo: 'number' })}
+    </div>
+    <div><span class="l">Lojas</span><div class="opcoes">
+      ${Object.entries(NOMES_LOJA).map(([k, v]) => opcao('lojas', k, v, !a.lojas.length || a.lojas.includes(k))).join('')}
+    </div><span class="ajuda">Todas marcadas = qualquer loja.</span></div>
+    <div class="dupla">
+      ${campo('precoMin', 'Preço mínimo (R$)', a.precoMin ?? '', { tipo: 'number', extra: 'step="any" min="0"' })}
+      ${campo('precoMax', 'Preço máximo (R$)', a.precoMax ?? '', { tipo: 'number', extra: 'step="any" min="0"' })}
+      ${campo('descontoMin', 'Desconto mínimo (%)', a.descontoMin || '', { tipo: 'number', ajuda: 'Ofertas sem desconto informado ficam de fora se preencher.' })}
+    </div>
+    <div class="dupla">
+      ${campo('incluir', 'Só ofertas com estas palavras', a.incluir.join(', '), { ajuda: 'Opcional. Ex.: cozinha, panela, airfryer' })}
+      ${campo('excluir', 'Nunca ofertas com estas palavras', a.excluir.join(', '), { ajuda: 'Opcional. Ex.: usado, recondicionado' })}
+    </div>`;
+
+  const quando = `
+    <div class="dupla">
+      ${campo('intervaloMin', 'Uma oferta a cada (minutos)', a.intervaloMin, { tipo: 'number', extra: 'min="1"' })}
+      ${campo('maxDia', 'Máximo de ofertas por dia', a.maxDia, { tipo: 'number', extra: 'min="1"' })}
+      ${campo('horaInicio', 'Começa às (hora)', a.horaInicio, { tipo: 'number', extra: 'min="0" max="23"' })}
+      ${campo('horaFim', 'Para às (hora)', a.horaFim, { tipo: 'number', extra: 'min="1" max="24"' })}
+    </div>
+    <div><span class="l">Dias da semana</span><div class="opcoes">${DIAS_CURTOS.map((n, i) => opcao('dias', i, n, a.dias.includes(i))).join('')}</div></div>
+    <span class="ajuda">No WhatsApp, até 5 a 8 ofertas por dia em cada grupo é o mais seguro para não ter o número bloqueado.</span>`;
+
+  const como = `
+    <div><span class="l">Formato</span><div class="opcoes">
+      ${opcao('formato', 'imagem', 'Imagem com o texto', a.formato !== 'texto', 'radio')}
+      ${opcao('formato', 'texto', 'Só texto (com prévia do link)', a.formato === 'texto', 'radio')}
+    </div></div>
+    <div class="campos" style="padding:0;border:0">${campoModelo({ k: 'modelo' }, a.modelo || d.modeloPadrao)}</div>
+    <span class="ajuda">Deixe igual ao modelo padrão para seguir as mudanças dele (Configurações → Modelo padrão).</span>`;
+
+  return pagina(d.nova ? 'Nova automação' : a.nome, `
+<header class="topo"><div class="in">
+  <div class="marca"><div class="logo">${ic('sacola')}</div>Bot de Achadinhos</div>
+  <a class="sair" href="/" style="margin-left:auto">${ic('voltar')}Voltar ao painel</a>
+</div></header>
+<main>
+  <h1>${d.nova ? 'Nova automação' : esc(a.nome)}</h1>
+  <p class="sub">Uma regra que trabalha sozinha: pega as ofertas, filtra pelo que você quer e envia para os seus destinos, no seu ritmo.</p>
+  <form method="post" action="/automacao" onsubmit="const b=this.querySelector('.salvar .btn');b.disabled=true;b.lastChild.textContent=' Salvando...'">
+    <input type="hidden" name="id" value="${esc(d.nova ? '' : a.id)}">
+    <input type="hidden" name="ativa" value="false">
+    <label class="switch" style="margin-top:18px"><input type="checkbox" name="ativa" value="true" ${a.ativa ? 'checked' : ''}>Automação ligada</label>
+    ${passo(1, 'Para onde', 'Os canais e grupos que recebem as ofertas', paraOnde)}
+    ${passo(2, 'O que', 'A fonte das ofertas e os filtros', oQue)}
+    ${passo(3, 'Quando', 'O ritmo, os dias e os horários', quando)}
+    ${passo(4, 'Como', 'O formato e o texto do post', como)}
+    <div class="salvar" style="gap:10px">${d.nova ? '' : '<button class="btn sec" type="submit" form="excluir" style="color:var(--bad)">' + ic('lixo') + 'Excluir</button>'}
+      <button class="btn">${ic('salvar')}<span> Salvar automação</span></button></div>
+  </form>
+  ${d.nova ? '' : `<form id="excluir" method="post" action="/automacao/acao" onsubmit="return confirm('Excluir a automação ${esc(a.nome).replace(/'/g, '')}? A fila e os envios não são apagados.')"><input type="hidden" name="id" value="${esc(a.id)}"><input type="hidden" name="acao" value="excluir"></form>`}
+</main>
+<script>(()=>{const s=document.querySelector('input[value=shopee][name=fontes]'),b=document.getElementById('busca-shopee');const f=()=>b.style.display=s.checked?'':'none';s.addEventListener('change',f);f();})()</script>`);
 }

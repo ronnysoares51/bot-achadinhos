@@ -3,10 +3,11 @@ import { chamar, enviar } from './destinos/telegram.js';
 import { listarGrupos, statusWhatsApp } from './destinos/whatsapp.js';
 import { montarOferta } from './oferta.js';
 import { formatarTelegram } from './formatar.js';
-import { adicionar, listar, remover, proxima, jaPostada, postsHoje } from './fila.js';
+import { adicionar, listar, remover, proxima, jaPostada } from './fila.js';
 import { publicar, diaLocal } from './publicar.js';
 import { registrarPostManual } from './agendador.js';
 import { NOMES } from './lojas/index.js';
+import { listarAutomacoes, enviadosHoje } from './automacoes.js';
 
 // Painel no privado do Telegram: o admin cola o link, vê a prévia e decide (postar, fila ou descartar).
 const pendentes = new Map();
@@ -75,9 +76,11 @@ async function tratarMensagem(msg) {
   if (cmd === '/status') {
     const wa = statusWhatsApp();
     const dia = diaLocal(new Date(), config.agendador.fusoHorario);
+    const auts = listarAutomacoes();
+    const linhas = auts.map((a) => `${a.ativa ? '🟢' : '⚪'} <b>${a.nome.replace(/[<>&]/g, '')}</b>: ${enviadosHoje(a, dia)}/${a.maxDia} hoje, a cada ${a.intervaloMin} min, ${a.horaInicio}h–${a.horaFim}h · ${a.destinos.telegram.length} canal(is) · ${a.destinos.whatsapp.length} grupo(s)`);
     return responder(
       chatId,
-      `<b>Status</b>\nTelegram: ${config.telegram.canais.length} canal(is)\nWhatsApp: ${wa.ativo ? (wa.conectado ? 'conectado' : 'desconectado') : 'desligado'} – ${config.whatsapp.grupos.length} grupo(s)\nFila: ${listar().length}\nPosts hoje: ${postsHoje(dia)}/${config.agendador.maxPorDia}\nHorário: ${config.agendador.horaInicio}h–${config.agendador.horaFim}h, a cada ${config.agendador.intervaloMin} min`,
+      `<b>Status</b>\nWhatsApp: ${wa.ativo ? (wa.conectado ? 'conectado' : 'desconectado') : 'desligado'}\nFila: ${listar().length}\n\n<b>Automações</b>\n${linhas.join('\n') || 'Nenhuma. Crie no painel web.'}`,
     );
   }
 
@@ -137,7 +140,7 @@ async function tratarBotao(q) {
   await chamar('editMessageReplyMarkup', { chat_id: chatId, message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => {});
   if (acao === 'descartar') return responder(chatId, '🗑 Descartada.');
   if (acao === 'fila') {
-    const item = adicionar(oferta);
+    const item = adicionar({ fonte: 'manual', ...oferta });
     return responder(chatId, item ? `🕒 Na fila (posição ${listar().length}).` : 'Essa oferta já está na fila.');
   }
   if (acao === 'agora') return postarAgora(chatId, { ...oferta, id: `manual-${id}` });
