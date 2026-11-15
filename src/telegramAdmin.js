@@ -121,6 +121,7 @@ async function enviarPrevia(chatId, oferta, cabecalho = '') {
   await enviar(chatId, {
     legenda: `${cabecalho}${formatarTelegram(oferta)}\n\n🔗 ${oferta.link}${aviso}${faltando}`,
     imagem: oferta.imagem,
+    fotoOriginal: oferta.fotoOriginal,
     teclado: {
       inline_keyboard: [
         [{ text: '✅ Postar agora', callback_data: `agora:${id}` }, { text: '🕒 Pôr na fila', callback_data: `fila:${id}` }],

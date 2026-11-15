@@ -43,7 +43,7 @@ function dentroDoLimite(agora = Date.now()) {
  * Processa uma mensagem de grupo monitorado.
  * aprovar(oferta, origem): manda para o admin aprovar (modo manual).
  */
-export async function processarMensagem({ texto, nomeGrupo, grupo }, { aprovar, avisar } = {}) {
+export async function processarMensagem({ texto, nomeGrupo, grupo, baixarFoto }, { aprovar, avisar } = {}) {
   const links = extrairLinks(texto).filter((l) => detectarLoja(l));
   if (!links.length) return { ok: false, motivo: 'sem link de loja' };
   if (!dentroDoLimite()) return { ok: false, motivo: 'limite por hora atingido' };
@@ -56,6 +56,13 @@ export async function processarMensagem({ texto, nomeGrupo, grupo }, { aprovar, 
       continue;
     }
     const oferta = await montarOferta('', { link: alvo.link, extra: extrairDeMensagem(texto), deOutraPessoa: true });
+    if (baixarFoto) {
+      const foto = await baixarFoto().catch(() => {
+        console.warn('[clone] Não foi possível baixar a foto original.');
+        return null;
+      });
+      if (foto) oferta.fotoOriginal = foto;
+    }
     if (jaPostada(oferta.chave) || listar().some((o) => o.chave === oferta.chave)) return { ok: false, motivo: 'repetida' };
     recentes.push(Date.now());
     registrarClone(nomeGrupo);

@@ -139,7 +139,21 @@ async function conectar(opcoes) {
         if (!jid || m.key.fromMe || !(await monitorado(jid))) continue;
         const msg = m.message || {};
         const texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption;
-        if (texto) await aoReceberMensagem({ grupo: jid, nomeGrupo: nomesGrupos.get(jid) || jid, texto });
+        if (!texto) continue;
+        const baixarFoto = msg.imageMessage && (async () => {
+          const limite = 5 * 1024 * 1024;
+          if (Number(msg.imageMessage.fileLength) > limite) return null;
+          const stream = await baileys.downloadContentFromMessage(msg.imageMessage, 'image');
+          const partes = [];
+          let tamanho = 0;
+          for await (const parte of stream) {
+            tamanho += parte.length;
+            if (tamanho > limite) return null;
+            partes.push(parte);
+          }
+          return tamanho ? Buffer.concat(partes, tamanho).toString('base64') : null;
+        });
+        await aoReceberMensagem({ grupo: jid, nomeGrupo: nomesGrupos.get(jid) || jid, texto, baixarFoto });
       } catch (e) {
         console.error('[whatsapp] monitor:', e.message);
       }
@@ -221,8 +235,9 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
     try {
       await conferirPermissao(jid);
       let r;
-      if (comImagem && oferta.imagem) {
-        r = await sock.sendMessage(jid, { image: { url: oferta.imagem }, caption: texto }).catch((e) => {
+      if (comImagem && (oferta.fotoOriginal || oferta.imagem)) {
+        const image = oferta.fotoOriginal ? Buffer.from(oferta.fotoOriginal, 'base64') : { url: oferta.imagem };
+        r = await sock.sendMessage(jid, { image, caption: texto }).catch((e) => {
           console.error(`[whatsapp] imagem falhou em ${jid} (${e.message}); enviando só o texto.`);
           return null;
         });
