@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { detectarLoja, extrairLinks } from './lojas/index.js';
 import { shopeeConfigurada } from './lojas/shopee.js';
+import { mlConectado } from './lojas/mlLinkbuilder.js';
 import { urlFinal } from './lojas/previa.js';
 import { montarOferta, extrairDeMensagem } from './oferta.js';
 import { adicionar, jaPostada, listar, registrarClone } from './fila.js';
@@ -14,7 +15,7 @@ export async function linkClonavel(url, { resolver = urlFinal } = {}) {
   const loja = detectarLoja(url);
   if (loja === 'shopee') return shopeeConfigurada() ? { loja, link: url } : { motivo: 'Shopee sem credenciais da API' };
   if (loja === 'mercadolivre') {
-    if (!config.mercadolivre.mattWord || !config.mercadolivre.mattTool) return { motivo: 'Mercado Livre sem matt_word/matt_tool' };
+    if (!mlConectado() && !(config.mercadolivre.mattWord && config.mercadolivre.mattTool)) return { motivo: 'Mercado Livre não conectado (Minhas lojas)' };
     const final = await resolver(url);
     const host = new URL(final).hostname.replace(/^www\./, '');
     if (detectarLoja(final) !== 'mercadolivre' || host === 'meli.la' || /\/social\//.test(final)) {
@@ -44,7 +45,7 @@ export async function processarMensagem({ texto, nomeGrupo }, { aprovar, avisar 
   for (const url of links) {
     const alvo = await linkClonavel(url);
     if (!alvo.link) continue;
-    const oferta = await montarOferta('', { link: alvo.link, extra: extrairDeMensagem(texto) });
+    const oferta = await montarOferta('', { link: alvo.link, extra: extrairDeMensagem(texto), deOutraPessoa: true });
     if (jaPostada(oferta.chave) || listar().some((o) => o.chave === oferta.chave)) return { ok: false, motivo: 'repetida' };
     recentes.push(Date.now());
     registrarClone(nomeGrupo);

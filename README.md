@@ -70,6 +70,18 @@ docker compose up -d
 docker compose logs -f   # QR do WhatsApp aparece aqui
 ```
 
+## Minhas lojas (link sempre seu)
+
+Painel → **Minhas lojas**:
+
+- **Mercado Livre**: etiqueta de afiliado + cookies da sua conta do portal de afiliados (extensão Cookie-Editor → Export → Header String). Com isso, todo link do ML (seus, do clone e da busca) vira um **meli.la oficial da sua conta**, pelo mesmo gerador do portal. Botão **Testar conexão** gera um link de teste. Se a sessão expirar, o bot avisa em vez de postar link sem comissão.
+- **Shopee**: App ID e Secret da Open API.
+- **Shein / TikTok Shop**: cole o seu link de afiliado (as duas lojas só pagam comissão em links gerados no painel/app delas; por isso ofertas dessas lojas vindas do clone são ignoradas).
+
+## Clone de ofertas
+
+Painel → **Clone de ofertas → Escolher grupos**: lista dos grupos do número do bot com caixas de seleção e busca por nome.
+
 ## Automações por grupo
 
 Cada automação é uma regra que trabalha sozinha (painel → **Automações → Nova automação**), em 4 passos:

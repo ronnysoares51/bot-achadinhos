@@ -10,7 +10,8 @@ import { publicar } from './publicar.js';
 import { MODELO_PADRAO } from './formatar.js';
 import { diaLocal } from './publicar.js';
 import { NOMES } from './lojas/index.js';
-import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo, telaAutomacao } from './painelVisual.js';
+import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo, telaAutomacao, telaLojas, telaClone } from './painelVisual.js';
+import { gerarMeliLaUm, normalizarCookies } from './lojas/mlLinkbuilder.js';
 
 export { CAMPOS } from './painelVisual.js';
 
@@ -68,6 +69,40 @@ function lerCorpo(req) {
   });
 }
 
+const CHAVES_LOJAS = ['ML_ETIQUETA', 'ML_COOKIES', 'ML_MATT_TOOL', 'SHOPEE_APP_ID', 'SHOPEE_SECRET', 'SHOPEE_SUB_ID', 'SHEIN_PARAMETROS'];
+const SECRETOS_LOJAS = new Set(['ML_COOKIES', 'SHOPEE_SECRET']);
+
+function dadosLojas(msg, teste) {
+  return {
+    msg,
+    teste,
+    lojas: {
+      ml: { etiqueta: config.mercadolivre.etiqueta, temCookies: Boolean(config.mercadolivre.cookies), mattTool: config.mercadolivre.mattTool },
+      shopee: { appId: config.shopee.appId, temSecret: Boolean(config.shopee.secret), subId: config.shopee.subId },
+      shein: { parametros: config.shein.parametros },
+    },
+  };
+}
+
+/** Salva as lojas no config.json e já aplica na hora (não precisa reiniciar). */
+function salvarLojas(f) {
+  const atual = lerConfigSalva();
+  for (const k of CHAVES_LOJAS) {
+    if (!f.has(k)) continue;
+    let v = String(f.get(k) || '').replace(/\r\n/g, '\n').trim();
+    if (SECRETOS_LOJAS.has(k) && !v) continue; // segredo em branco = manter
+    if (k === 'ML_COOKIES') v = normalizarCookies(v);
+    atual[k] = v;
+    process.env[k] = v;
+  }
+  fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
+  fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
+  const e = process.env;
+  Object.assign(config.mercadolivre, { etiqueta: e.ML_ETIQUETA || '', cookies: e.ML_COOKIES || '', mattWord: e.ML_ETIQUETA || e.ML_MATT_WORD || '', mattTool: e.ML_MATT_TOOL || '' });
+  Object.assign(config.shopee, { appId: e.SHOPEE_APP_ID || '', secret: e.SHOPEE_SECRET || '', subId: e.SHOPEE_SUB_ID || 'achadinhos' });
+  config.shein.parametros = e.SHEIN_PARAMETROS || '';
+}
+
 function dadosInicio(msg) {
   const wa = statusWhatsApp();
   const dia = diaLocal(new Date(), config.agendador.fusoHorario);
@@ -92,6 +127,7 @@ function dadosInicio(msg) {
     automacoes: listarAutomacoes(),
     diaHoje: diaLocal(new Date(), config.agendador.fusoHorario),
     cloneAtivo: config.clone.grupos.length > 0,
+    clone: { grupos: config.clone.grupos.length, automatico: config.clone.automatico },
     clonesHoje: clonesHoje(),
     hora: (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: config.agendador.fusoHorario, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
     preenchido: (k) => Boolean(salvo[k] || process.env[k]),
@@ -99,7 +135,7 @@ function dadosInicio(msg) {
       { t: 'Token do Telegram', d: 'Crie o bot no @BotFather e cole o token em Configurações → Telegram.', feito: Boolean(config.telegram.token) },
       { t: 'Seu ID de admin', d: 'Mande /start ao bot no Telegram e cole o ID que ele responder.', feito: config.telegram.admins.length > 0 },
       { t: 'Primeira automação', d: 'Em Automações → Nova automação: escolha o canal/grupos, as ofertas e o ritmo.', feito: listarAutomacoes().some((a) => a.destinos.telegram.length || a.destinos.whatsapp.length) },
-      { t: 'Credenciais da Shopee', d: 'App ID e Secret da Open API de afiliados (opcional para as outras lojas).', feito: temShopee },
+      { t: 'Minhas lojas', d: 'Conecte o Mercado Livre e a Shopee no botão "Minhas lojas", no topo do painel.', feito: temShopee || Boolean(config.mercadolivre.etiqueta && config.mercadolivre.cookies) },
       { t: 'WhatsApp', d: 'Ligue "Postar no WhatsApp", salve e escaneie o QR com o número do bot.', feito: wa.ativo && wa.conectado },
     ],
   };
@@ -160,6 +196,44 @@ export function iniciarPainelWeb() {
         return fs.createReadStream(png).pipe(res);
       }
 
+      if (url.pathname === '/clone' && req.method === 'GET') {
+        const wa = statusWhatsApp();
+        const grupos = wa.conectado ? await listarGrupos().catch(() => null) : null;
+        return enviar(200, telaClone({ grupos, selecionados: config.clone.grupos, automatico: config.clone.automatico, maxHora: config.clone.maxHora, waAtivo: wa.ativo, msg: url.searchParams.get('msg') }));
+      }
+
+      if (url.pathname === '/clone' && req.method === 'POST') {
+        const f = await lerForm(req);
+        const grupos = [...f.getAll('grupos'), ...String(f.get('extras') || '').split(',')].map((g) => g.trim()).filter(Boolean);
+        const automatico = f.getAll('automatico').includes('true');
+        const maxHora = Math.max(1, Math.min(120, Number(f.get('maxHora')) || 10));
+        const atual = lerConfigSalva();
+        Object.assign(atual, { WHATSAPP_MONITORAR: grupos.join(','), CLONE_AUTOMATICO: String(automatico), CLONE_MAX_HORA: String(maxHora) });
+        fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
+        fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
+        Object.assign(config.clone, { grupos, automatico, maxHora }); // vale na hora, sem reiniciar
+        return enviar(303, '', { Location: '/clone?msg=' + encodeURIComponent(`Salvo: ${grupos.length} grupo(s) monitorado(s).`) });
+      }
+
+      if (url.pathname === '/lojas' && req.method === 'GET') return enviar(200, telaLojas(dadosLojas(url.searchParams.get('msg'))));
+
+      if (url.pathname === '/lojas' && req.method === 'POST') {
+        salvarLojas(await lerForm(req));
+        return enviar(303, '', { Location: '/lojas?msg=' + encodeURIComponent('Lojas salvas. Já estão valendo para os próximos links.') });
+      }
+
+      if (url.pathname === '/lojas/testar-ml' && req.method === 'POST') {
+        salvarLojas(await lerForm(req));
+        let teste;
+        try {
+          const link = await gerarMeliLaUm('https://www.mercadolivre.com.br/ofertas');
+          teste = { ok: true, texto: `Funcionou! O Mercado Livre gerou ${link} na sua conta. A partir de agora todo link do ML sai com a sua comissão.` };
+        } catch (e) {
+          teste = { ok: false, texto: `Não deu certo: ${e.message}` };
+        }
+        return enviar(200, telaLojas(dadosLojas(null, teste)));
+      }
+
       if (url.pathname === '/whatsapp/ligar' && req.method === 'POST') {
         const atual = lerConfigSalva();
         atual.WHATSAPP_ATIVO = 'true';
@@ -202,7 +276,7 @@ export function iniciarPainelWeb() {
             whatsapp: [...f.getAll('whatsapp'), ...(f.get('whatsapp_extra') || '').split(/[,\s]+/)].filter(Boolean),
           },
           fontes: f.getAll('fontes'),
-          buscaShopee: { palavras: f.get('shopee_palavras'), descontoMin: f.get('shopee_desconto'), notaMin: f.get('shopee_nota'), intervaloHoras: f.get('shopee_intervalo') },
+          buscaShopee: { palavras: f.get('shopee_palavras'), descontoMin: f.get('shopee_desconto'), notaMin: f.get('shopee_nota'), intervaloHoras: f.get('shopee_intervalo'), porPalavra: f.get('shopee_por_palavra') },
           lojas: lojas.length === 4 ? [] : lojas,
           precoMin: f.get('precoMin'),
           precoMax: f.get('precoMax'),

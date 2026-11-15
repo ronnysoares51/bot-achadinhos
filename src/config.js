@@ -55,7 +55,10 @@ export const config = {
     apiUrl: process.env.SHOPEE_API_URL || 'https://open-api.affiliate.shopee.com.br/graphql',
   },
   mercadolivre: {
-    mattWord: process.env.ML_MATT_WORD || '',
+    // Conta conectada (Minhas lojas): etiqueta do Linkbuilder + cookies da sessão do portal de afiliados.
+    etiqueta: process.env.ML_ETIQUETA || process.env.ML_MATT_WORD || '',
+    cookies: process.env.ML_COOKIES || '',
+    mattWord: process.env.ML_MATT_WORD || process.env.ML_ETIQUETA || '',
     mattTool: process.env.ML_MATT_TOOL || '',
   },
   shein: {

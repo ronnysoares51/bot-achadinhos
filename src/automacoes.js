@@ -55,6 +55,7 @@ export function normalizar(a = {}) {
       descontoMin: numero(a.buscaShopee?.descontoMin, 30, 0, 95),
       notaMin: numero(a.buscaShopee?.notaMin, 4.5, 0, 5),
       intervaloHoras: numero(a.buscaShopee?.intervaloHoras, 3, 1, 48),
+      porPalavra: numero(a.buscaShopee?.porPalavra, 5, 1, 20),
     },
     lojas: lista(a.lojas).filter((l) => LOJAS.includes(l)),
     precoMin: numero(a.precoMin, null, 0),

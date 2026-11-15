@@ -110,3 +110,30 @@ test('rotas de automação exigem login', async () => {
   const r = await fetch(`${base}/automacao/acao`, { method: 'POST', body: 'id=x&acao=excluir', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
   assert.match(await r.text(), /Senha do painel/);
 });
+
+test('Minhas lojas: salva e aplica na hora (segredo vazio mantém o anterior)', async () => {
+  const cookie = await entrar();
+  const post = (corpo) => fetch(`${base}/lojas`, { method: 'POST', body: corpo, headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  await post('ML_ETIQUETA=minhatag&ML_COOKIES=' + encodeURIComponent('Cookie: a=1; b=2') + '&SHOPEE_APP_ID=999&SHOPEE_SECRET=seg');
+  const { config } = await import('../src/config.js');
+  assert.equal(config.mercadolivre.etiqueta, 'minhatag');
+  assert.equal(config.mercadolivre.cookies, 'a=1; b=2');
+  assert.equal(config.shopee.appId, '999');
+  await post('ML_ETIQUETA=minhatag&ML_COOKIES=&SHOPEE_SECRET=');
+  assert.equal(config.mercadolivre.cookies, 'a=1; b=2', 'cookies mantidos');
+  assert.equal(config.shopee.secret, 'seg', 'secret mantido');
+  const html = await (await fetch(`${base}/lojas`, { headers: { cookie } })).text();
+  assert.match(html, /Conectada/);
+  assert.doesNotMatch(html, /a=1; b=2/, 'cookies nunca aparecem na tela');
+});
+
+test('Clone: salva grupos escolhidos e vale na hora', async () => {
+  const cookie = await entrar();
+  await fetch(`${base}/clone`, { method: 'POST', body: 'grupos=111%40g.us&grupos=222%40g.us&automatico=false&automatico=true&maxHora=30', headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, redirect: 'manual' });
+  const { config } = await import('../src/config.js');
+  assert.deepEqual(config.clone.grupos, ['111@g.us', '222@g.us']);
+  assert.equal(config.clone.automatico, true);
+  assert.equal(config.clone.maxHora, 30);
+  const html = await (await fetch(`${base}/clone`, { headers: { cookie } })).text();
+  assert.match(html, /Grupos para clonar/);
+});

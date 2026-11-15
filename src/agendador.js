@@ -25,7 +25,7 @@ async function buscasShopee(automacoes, avisar) {
     for (const palavra of b.palavras) {
       try {
         const ofertas = escolherOfertas(await buscarOfertasShopee(palavra), b);
-        for (const o of ofertas.slice(0, 3)) {
+        for (const o of ofertas.slice(0, b.porPalavra)) {
           const item = { ...o, fonte: 'shopee', automacao: a.id };
           if (aceita(item, a).ok && adicionar(item)) novas++;
         }

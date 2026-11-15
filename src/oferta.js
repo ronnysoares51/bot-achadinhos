@@ -1,7 +1,9 @@
+import { config } from './config.js';
 import { detectarLoja, extrairLinks } from './lojas/index.js';
 import { gerarLinkShopee, produtoShopee, shopeeConfigurada } from './lojas/shopee.js';
 import { linkMercadoLivre, linkShein, linkTikTokShop, limparUrl } from './lojas/outras.js';
 import { buscarPrevia, urlFinal } from './lojas/previa.js';
+import { mlConectado, gerarMeliLaUm } from './lojas/mlLinkbuilder.js';
 
 /** "R$ 1.299,90" -> 1299.9 */
 export function lerPreco(txt) {
@@ -66,7 +68,7 @@ export function extrairDeMensagem(texto) {
 const ENCURTADOS = /^(s\.shopee\.com\.br|shope\.ee|shp\.ee|vt\.tiktok\.com|vm\.tiktok\.com|mercadolivre\.com|mlb\.am)$/;
 
 /** Converte o link para o link de afiliado da loja certa. */
-export async function converterLink(url) {
+export async function converterLink(url, opcoes = {}) {
   let alvo = url;
   const host = new URL(url).hostname.replace(/^www\./, '');
   const loja = detectarLoja(url);
@@ -79,8 +81,21 @@ export async function converterLink(url) {
   switch (loja) {
     case 'shopee':
       return { loja, link: await gerarLinkShopee(limparUrl(alvo)), urlProduto: alvo };
-    case 'mercadolivre':
+    case 'mercadolivre': {
+      // Link meli.la colado por você é mantido (já é seu); com a conta conectada, qualquer outro
+      // link vira um meli.la novo na sua conta (link oficial, comissão garantida).
+      if (host === 'meli.la' && !opcoes.deOutraPessoa) return { loja, link: url, urlProduto: alvo };
+      if (mlConectado()) {
+        const produto = host === 'meli.la' ? await urlFinal(url) : alvo;
+        try {
+          return { loja, link: await gerarMeliLaUm(limparUrl(produto)), urlProduto: produto };
+        } catch (e) {
+          if (!config.mercadolivre.mattTool) throw e;
+          console.error('[mercadolivre] meli.la falhou, usando parâmetros:', e.message);
+        }
+      }
       return { loja, link: linkMercadoLivre(host === 'meli.la' ? url : alvo), urlProduto: alvo };
+    }
     case 'shein':
       return { loja, link: linkShein(url), urlProduto: alvo };
     case 'tiktokshop':
@@ -91,12 +106,12 @@ export async function converterLink(url) {
 }
 
 /** Monta a oferta completa a partir da mensagem do admin. */
-export async function montarOferta(texto, { link: linkForcado, extra = {} } = {}) {
+export async function montarOferta(texto, { link: linkForcado, extra = {}, deOutraPessoa = false } = {}) {
   const manual = lerMensagemAdmin(texto);
   if (linkForcado) manual.link = linkForcado;
   for (const [k, v] of Object.entries(extra)) if (manual[k] == null && v != null) manual[k] = v;
   if (!manual.link) throw new Error('Mande um link de produto.');
-  const { loja, link, urlProduto } = await converterLink(manual.link);
+  const { loja, link, urlProduto } = await converterLink(manual.link, { deOutraPessoa });
 
   let auto = {};
   if (loja === 'shopee' && shopeeConfigurada()) {

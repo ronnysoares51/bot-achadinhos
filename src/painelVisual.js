@@ -44,23 +44,8 @@ export const CAMPOS = [
     { k: 'WHATSAPP_PAUSA_MIN', rot: 'Pausa mínima entre grupos', ajuda: 'Em segundos.', tipo: 'numero' },
     { k: 'WHATSAPP_PAUSA_MAX', rot: 'Pausa máxima entre grupos', ajuda: 'Em segundos.', tipo: 'numero' },
   ] },
-  { titulo: 'Clone de ofertas', icone: 'ima', desc: 'Acompanha grupos de ofertas de outras pessoas e traz as promoções já com o SEU link (Shopee e Mercado Livre).', campos: [
-    { k: 'WHATSAPP_MONITORAR', rot: 'Grupos monitorados', ajuda: 'IDs (ou nomes exatos) dos grupos de outras pessoas. O número do bot precisa estar neles. Use /grupos no Telegram.' },
-    { k: 'CLONE_AUTOMATICO', rot: 'Colocar na fila sem me perguntar', tipo: 'switch', ajuda: 'Desligado: cada oferta chega no seu Telegram para você aprovar.' },
-    { k: 'CLONE_MAX_HORA', rot: 'Máximo de ofertas clonadas por hora', tipo: 'numero' },
-  ] },
   { titulo: 'Modelo padrão da mensagem', icone: 'texto', desc: 'Usado pelas automações que não têm modelo próprio. Linhas com variável vazia somem sozinhas.', campos: [
     { k: 'MODELO_MENSAGEM', rot: 'Modelo', tipo: 'modelo' },
-  ] },
-  { titulo: 'Shopee', icone: 'loja', desc: 'Gera o link de afiliado sozinho pela API oficial.', campos: [
-    { k: 'SHOPEE_APP_ID', rot: 'App ID', ajuda: 'Programa de afiliados → Open API.' },
-    { k: 'SHOPEE_SECRET', rot: 'Secret', tipo: 'segredo' },
-    { k: 'SHOPEE_SUB_ID', rot: 'Sub ID dos links', ajuda: 'Aparece no relatório de vendas da Shopee.' },
-  ] },
-  { titulo: 'Mercado Livre e Shein', icone: 'sacola', desc: 'No ML, links meli.la funcionam sem configurar nada. Shein e TikTok Shop: cole o seu link de afiliado.', campos: [
-    { k: 'ML_MATT_WORD', rot: 'Mercado Livre: matt_word', ajuda: 'Sua etiqueta de afiliado (opcional).' },
-    { k: 'ML_MATT_TOOL', rot: 'Mercado Livre: matt_tool', ajuda: 'Opcional, junto com o matt_word.' },
-    { k: 'SHEIN_PARAMETROS', rot: 'Shein: parâmetros extras', ajuda: 'Opcional. Ex.: url_from=SEU_ID' },
   ] },
 ];
 export const CHAVES = new Set(CAMPOS.flatMap((g) => g.campos.map((c) => c.k)));
@@ -288,7 +273,7 @@ export function telaInicio(d) {
   return pagina('Painel', `
 <header class="topo"><div class="in">
   <div class="marca"><div class="logo">${ic('sacola')}</div>Bot de Achadinhos</div>
-  <div class="lojas">${LOJAS}</div>
+  <a class="sair" href="/lojas" style="margin-left:auto">${ic('loja')}Minhas lojas</a>
   <a class="sair" href="/sair">${ic('sair')}Sair</a>
 </div></header>
 <main>
@@ -321,6 +306,14 @@ export function telaInicio(d) {
     <div class="cab"><h2>Automações</h2><a class="btn" href="/automacao" style="min-height:44px;padding:0 16px">${ic('mais')}Nova automação</a></div>
     <div class="auts">${d.automacoes.map((a) => cardAutomacao(a, d)).join('')}
       ${d.automacoes.length ? '' : `<a class="novo card" href="/automacao">${ic('raio')}<b>Crie sua primeira automação</b><span style="font-size:14px">Escolha para onde vão as ofertas, quais ofertas, quando e como.</span></a>`}
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="card" style="padding:18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <div class="bolha" style="width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)">${ic('ima')}</div>
+      <div style="flex:1;min-width:220px"><b>Clone de ofertas</b><div class="sub" style="font-size:14px;margin:2px 0 0">${d.clone.grupos ? `Monitorando ${d.clone.grupos} grupo(s) · ${d.clone.automatico ? 'vai direto para a fila' : 'você aprova no Telegram'} · ${d.clonesHoje} hoje` : 'Escolha grupos de ofertas de outras pessoas para trazer as promoções com o seu link.'}</div></div>
+      <a class="btn sec" href="/clone" style="min-height:44px">${ic('editar')}Escolher grupos</a>
     </div>
   </section>
 
@@ -440,7 +433,8 @@ export function telaAutomacao(d) {
       ${campo('shopee_palavras', 'Busca Shopee: palavras-chave', a.buscaShopee.palavras.join(', '), { ajuda: 'Separadas por vírgula. Ex.: fone bluetooth, air fryer' })}
       ${campo('shopee_desconto', 'Busca Shopee: desconto mínimo (%)', a.buscaShopee.descontoMin, { tipo: 'number' })}
       ${campo('shopee_nota', 'Busca Shopee: nota mínima', a.buscaShopee.notaMin, { tipo: 'number', extra: 'step="0.1" min="0" max="5"' })}
-      ${campo('shopee_intervalo', 'Buscar a cada (horas)', a.buscaShopee.intervaloHoras, { tipo: 'number' })}
+      ${campo('shopee_intervalo', 'Buscar a cada (horas)', a.buscaShopee.intervaloHoras, { tipo: 'number', extra: 'min="1"' })}
+      ${campo('shopee_por_palavra', 'Ofertas por palavra em cada busca', a.buscaShopee.porPalavra, { tipo: 'number', extra: 'min="1" max="20"', ajuda: 'Mais ofertas para ritmos rápidos.' })}
     </div>
     <div><span class="l">Lojas</span><div class="opcoes">
       ${Object.entries(NOMES_LOJA).map(([k, v]) => opcao('lojas', k, v, !a.lojas.length || a.lojas.includes(k))).join('')}
@@ -456,14 +450,21 @@ export function telaAutomacao(d) {
     </div>`;
 
   const quando = `
+    <div><span class="l">Ritmo</span><div class="opcoes" id="ritmos">
+      ${[5, 10, 15, 20, 30, 45, 60].map((m) => `<button type="button" class="chip" data-min="${m}" style="min-height:44px;padding:0 16px;font-size:14px;font-weight:600">a cada ${m} min</button>`).join('')}
+    </div></div>
     <div class="dupla">
       ${campo('intervaloMin', 'Uma oferta a cada (minutos)', a.intervaloMin, { tipo: 'number', extra: 'min="1"' })}
-      ${campo('maxDia', 'Máximo de ofertas por dia', a.maxDia, { tipo: 'number', extra: 'min="1"' })}
+      ${campo('maxDia', 'Máximo de ofertas por dia', a.maxDia, { tipo: 'number', extra: 'min="1" max="500"' })}
       ${campo('horaInicio', 'Começa às (hora)', a.horaInicio, { tipo: 'number', extra: 'min="0" max="23"' })}
       ${campo('horaFim', 'Para às (hora)', a.horaFim, { tipo: 'number', extra: 'min="1" max="24"' })}
     </div>
+    <div class="aviso ok" style="margin:0" id="estimativa"></div>
     <div><span class="l">Dias da semana</span><div class="opcoes">${DIAS_CURTOS.map((n, i) => opcao('dias', i, n, a.dias.includes(i))).join('')}</div></div>
-    <span class="ajuda">No WhatsApp, até 5 a 8 ofertas por dia em cada grupo é o mais seguro para não ter o número bloqueado.</span>`;
+    <span class="ajuda">Telegram aguenta ritmo alto. No WhatsApp, ritmo muito alto em grupo aumenta o risco de o número ser bloqueado: comece devagar e aumente aos poucos.</span>
+    <script>(()=>{const $=id=>document.getElementById(id);const est=()=>{const iv=+$('intervaloMin').value||1,ini=+$('horaInicio').value||0,fim=+$('horaFim').value||24,max=+$('maxDia').value||1;const cab=Math.max(0,Math.floor((fim-ini)*60/iv));const real=Math.min(cab,max);$('estimativa').innerHTML='<div>≈ <b>'+real+' ofertas por dia</b> por destino ('+(fim-ini)+' h, 1 a cada '+iv+' min'+(max<cab?', limitado pelo máximo de '+max:'')+'). A fila precisa ter ofertas suficientes: use várias palavras na busca da Shopee e o clone de ofertas.</div>';};
+    document.querySelectorAll('#ritmos .chip').forEach(b=>b.addEventListener('click',()=>{$('intervaloMin').value=b.dataset.min;const ini=+$('horaInicio').value||0,fim=+$('horaFim').value||24;$('maxDia').value=Math.max(1,Math.floor((fim-ini)*60/b.dataset.min));est();}));
+    ['intervaloMin','horaInicio','horaFim','maxDia'].forEach(id=>$(id).addEventListener('input',est));est();})();</script>`;
 
   const como = `
     <div><span class="l">Formato</span><div class="opcoes">
@@ -518,4 +519,90 @@ function blocoWhatsApp(d) {
       <form method="post" action="/whatsapp/desconectar" style="margin-top:8px"><button class="mini" title="Apaga a sessão e gera um QR novo">${ic('lixo')}<span>Recomeçar conexão</span></button></form>
     </div>
     <script>setTimeout(()=>location.reload(),8000)</script></div></section>`;
+}
+
+/** d = { lojas: { ml:{etiqueta, temCookies, mattTool, atualizado}, shopee:{appId, temSecret, subId}, shein:{parametros} }, msg, teste } */
+export function telaLojas(d) {
+  const l = d.lojas;
+  const st = (ok, txt = ok ? 'Conectada' : 'Não configurada') => `<span class="pill ${ok ? 'ok' : 'off'}">${txt}</span>`;
+  const cartao = (tag, nome, status, desc, corpo, aberto) => `<details class="grupo" ${aberto ? 'open' : ''}>
+    <summary><span class="tag ${tag}" style="min-width:110px;justify-content:center">${nome}</span><div class="txt"><div class="d">${desc}</div></div>${status}${ic('seta', 'seta')}</summary>
+    <div class="corpo">${corpo}</div></details>`;
+  const mlOk = Boolean(l.ml.etiqueta && l.ml.temCookies);
+
+  const ml = `
+    <p class="sub" style="margin:0">Com a conta conectada, <b>todo link do Mercado Livre</b> (seus, do clone ou da busca) vira um <b>meli.la oficial da sua conta</b>, igual ao gerador do portal de afiliados.</p>
+    <div class="dupla">
+      ${campo('ML_ETIQUETA', 'Etiqueta (tag) de afiliado', l.ml.etiqueta, { ajuda: 'Portal de afiliados → Gerador de links → "Etiqueta em uso". Ex.: soro1826673' })}
+      ${campo('ML_MATT_TOOL', 'matt_tool (opcional, plano B)', l.ml.mattTool, { ajuda: 'Só se quiser que, quando o gerador falhar, o link use parâmetros.' })}
+    </div>
+    <div><label class="l" for="ML_COOKIES">Cookies da sua conta do Mercado Livre ${l.ml.temCookies ? '<span class="ja">salvo</span>' : ''}</label>
+      <textarea class="in" id="ML_COOKIES" name="ML_COOKIES" style="min-height:90px" placeholder="${l.ml.temCookies ? 'Já salvos. Cole de novo só se a sessão expirar.' : 'Cole aqui (formato Header String ou JSON)'}"></textarea>
+      <span class="ajuda"><b>Como pegar:</b> no computador, entre em <b>mercadolivre.com.br/afiliados</b> com a sua conta → instale a extensão <b>Cookie-Editor</b> no Chrome → abra-a nessa página → <b>Export → Header String</b> → cole aqui. Os cookies ficam só no seu servidor. Se você sair da conta no navegador, eles expiram e é só colar de novo.</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn sec" formaction="/lojas/testar-ml" formmethod="post">${ic('raio')}Testar conexão</button>
+    </div>
+    ${d.teste ? `<div class="aviso ${d.teste.ok ? 'ok' : ''}" style="margin:0">${ic(d.teste.ok ? 'check' : 'alerta')}<div>${esc(d.teste.texto)}</div></div>` : ''}`;
+
+  const shopee = `
+    <p class="sub" style="margin:0">Gera o link de afiliado sozinho pela API oficial e permite a busca automática de ofertas.</p>
+    <div class="dupla">
+      ${campo('SHOPEE_APP_ID', 'App ID', l.shopee.appId, { ajuda: 'affiliate.shopee.com.br → Open API' })}
+      <div><label class="l" for="SHOPEE_SECRET">Secret ${l.shopee.temSecret ? '<span class="ja">salvo</span>' : ''}</label><input class="in" id="SHOPEE_SECRET" name="SHOPEE_SECRET" type="password" autocomplete="new-password" placeholder="${l.shopee.temSecret ? '•••••••• (deixe vazio para manter)' : ''}"></div>
+      ${campo('SHOPEE_SUB_ID', 'Sub ID dos links', l.shopee.subId, { ajuda: 'Aparece no relatório de vendas.' })}
+    </div>`;
+
+  const shein = `
+    <p class="sub" style="margin:0">A Shein só paga comissão em links gerados no painel de afiliados (ou no app). Por isso, por enquanto: <b>cole o seu link de afiliado</b> da Shein no privado do bot. Ofertas da Shein vindas do clone são ignoradas, porque o link continuaria sendo da outra pessoa.</p>
+    ${campo('SHEIN_PARAMETROS', 'Parâmetros extras (opcional)', l.shein.parametros, { ajuda: 'Só se você souber o parâmetro de afiliado que a Shein coloca nos seus links. Ex.: url_from=SEU_ID' })}`;
+
+  const tiktok = `<p class="sub" style="margin:0">Cole o link de afiliado gerado no app (Afiliados → produto → Compartilhar) no privado do bot. Como na Shein, ofertas de TikTok Shop do clone são ignoradas.</p>`;
+
+  return pagina('Minhas lojas', `
+<header class="topo"><div class="in">
+  <div class="marca"><div class="logo">${ic('sacola')}</div>Bot de Achadinhos</div>
+  <a class="sair" href="/" style="margin-left:auto">${ic('voltar')}Voltar ao painel</a>
+</div></header>
+<main>
+  <h1>Minhas lojas</h1>
+  <p class="sub">É o cadastro de afiliado de cada loja que faz todo link sair com a sua comissão.</p>
+  ${d.msg ? `<div class="aviso ok" role="status">${ic('check')}<div>${esc(d.msg)}</div></div>` : ''}
+  <form method="post" action="/lojas" class="secao" onsubmit="const b=this.querySelector('.salvar .btn');if(b){b.disabled=true}">
+    ${cartao('mercadolivre', 'Mercado Livre', st(mlOk, mlOk ? 'Conectada' : l.ml.etiqueta ? 'Faltam os cookies' : 'Não configurada'), 'Links meli.la oficiais da sua conta', ml, !mlOk || d.teste)}
+    ${cartao('shopee', 'Shopee', st(Boolean(l.shopee.appId && l.shopee.temSecret)), 'API oficial de afiliados', shopee, false)}
+    ${cartao('shein', 'Shein', st(true, 'Link colado'), 'Seus links do painel/app de afiliados', shein, false)}
+    ${cartao('tiktokshop', 'TikTok Shop', st(true, 'Link colado'), 'Seus links do app', tiktok, false)}
+    <div class="salvar"><button class="btn">${ic('salvar')}<span> Salvar lojas</span></button></div>
+  </form>
+</main>`);
+}
+
+/** d = { grupos: [{id,nome}] | null, selecionados: [], automatico, maxHora, waAtivo, msg } */
+export function telaClone(d) {
+  const sel = new Set(d.selecionados);
+  const extras = d.selecionados.filter((g) => !(d.grupos || []).some((x) => x.id === g || x.nome === g));
+  return pagina('Clone de ofertas', `
+<header class="topo"><div class="in">
+  <div class="marca"><div class="logo">${ic('sacola')}</div>Bot de Achadinhos</div>
+  <a class="sair" href="/" style="margin-left:auto">${ic('voltar')}Voltar ao painel</a>
+</div></header>
+<main>
+  <h1>Clone de ofertas</h1>
+  <p class="sub">Marque os grupos de ofertas de outras pessoas que o número do bot vai acompanhar. Cada promoção da <b>Shopee</b> ou do <b>Mercado Livre</b> que aparecer lá vira uma oferta com o <b>seu</b> link.</p>
+  ${d.msg ? `<div class="aviso ok" role="status">${ic('check')}<div>${esc(d.msg)}</div></div>` : ''}
+  <form method="post" action="/clone" class="card secao" style="padding:18px;display:grid;gap:18px">
+    <div><span class="l">Grupos para clonar</span>
+    ${d.grupos ? (d.grupos.length ? `<input class="in" id="filtro" placeholder="Buscar grupo pelo nome..." style="margin-bottom:8px">
+      <div class="grupos" id="lista">${d.grupos.map((g) => `<label><input type="checkbox" name="grupos" value="${esc(g.id)}" ${sel.has(g.id) || sel.has(g.nome) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${esc(g.id.replace('@g.us', ''))}</span></label>`).join('')}</div>
+      <span class="ajuda">O número do bot precisa estar no grupo. Não marque os seus próprios grupos de destino.</span>` : '<span class="ajuda">O número do bot ainda não está em nenhum grupo. Entre nos grupos que quer clonar e recarregue esta página.</span>')
+      : `<div class="aviso" style="margin:0">${ic('alerta')}<div>WhatsApp ${d.waAtivo ? 'desconectado' : 'desligado'}: conecte o número do bot na página inicial para ver a lista de grupos.</div></div>`}
+    ${extras.length ? `<input type="hidden" name="extras" value="${esc(extras.join(','))}">` : ''}</div>
+    <input type="hidden" name="automatico" value="false">
+    <label class="switch"><input type="checkbox" name="automatico" value="true" ${d.automatico ? 'checked' : ''}>Colocar na fila sem me perguntar</label>
+    <span class="ajuda" style="margin-top:-10px">Desligado: cada oferta clonada chega no seu Telegram com os botões Postar / Fila / Descartar.</span>
+    ${campo('maxHora', 'Máximo de ofertas clonadas por hora', d.maxHora, { tipo: 'number', extra: 'min="1" max="120"' })}
+    <div class="salvar"><button class="btn">${ic('salvar')}<span> Salvar</span></button></div>
+  </form>
+</main>
+<script>(()=>{const f=document.getElementById('filtro');if(!f)return;f.addEventListener('input',()=>{const q=f.value.toLowerCase();document.querySelectorAll('#lista label').forEach(l=>l.style.display=l.textContent.toLowerCase().includes(q)?'':'none');});})()</script>`);
 }
