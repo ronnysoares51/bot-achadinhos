@@ -1,0 +1,33 @@
+# Para um servidor com as portas 80/443 livres: bot + HTTPS automático (Caddy / Let's Encrypt).
+services:
+  bot:
+    build: https://github.com/ronnysoares51/bot-achadinhos.git#main
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - PASTA_DADOS=/app/dados
+      - PAINEL_PORTA=3000
+    volumes:
+      - dados:/app/dados
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMINIO:-achadinhos.rstvquix.com} --to bot:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_dados:/data
+      - caddy_config:/config
+    depends_on:
+      - bot
+
+volumes:
+  dados:
+  caddy_dados:
+  caddy_config:

@@ -28,9 +28,9 @@ if [ -n "$OCUPADAS" ] && ! docker compose ps --services 2>/dev/null | grep -q ca
   echo "    As portas 80/443 já estão em uso por outro serviço:"
   echo "$OCUPADAS"
   echo "    Subindo sem o Caddy (painel em 127.0.0.1:3010). Configure o proxy existente para ${DOMINIO}."
-  docker compose -f docker-compose.sem-caddy.yml up -d --build
+  docker compose up -d --build && bash scripts/ligar-subdominio.sh
 else
-  docker compose up -d --build
+  docker compose -f docker-compose.com-caddy.yml up -d --build
 fi
 
 echo "==> Pronto"
