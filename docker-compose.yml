@@ -1,0 +1,10 @@
+services:
+  bot-achadinhos:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - dados:/app/dados
+
+volumes:
+  dados:

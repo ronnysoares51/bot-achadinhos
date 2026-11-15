@@ -1,0 +1,22 @@
+{
+  "name": "bot-achadinhos",
+  "version": "0.1.0",
+  "description": "Bot de achadinhos: converte links de afiliado (Mercado Livre, Shopee, Shein, TikTok Shop) e posta em grupos do WhatsApp e canais do Telegram.",
+  "type": "module",
+  "main": "src/index.js",
+  "license": "MIT",
+  "author": "Ronny Soares",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test tests/*.test.js",
+    "testar-link": "node scripts/testar-link.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "dotenv": "^16.4.7",
+    "qrcode": "^1.5.4"
+  }
+}
