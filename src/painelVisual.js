@@ -510,7 +510,16 @@ export function telaAutomacao(d) {
 
 function blocoWhatsApp(d) {
   const w = d.whatsapp;
-  if (w.conectado) return '';
+  if (w.conectado) {
+    if (!d.gruposDestino?.length) return '';
+    return `<section class="secao"><div class="card" style="padding:18px;display:grid;gap:10px">
+      <h2 style="margin:0;font-size:18px">Testar envio no WhatsApp</h2>
+      <p class="sub" style="margin:0">Manda uma mensagem de teste no grupo e mostra se o WhatsApp entregou. Use se as ofertas não estiverem aparecendo.</p>
+      <form method="post" action="/whatsapp/testar" style="display:flex;gap:8px;flex-wrap:wrap" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button span').textContent=' Testando...'">
+        <select class="in" name="grupo" style="flex:1;min-width:220px" aria-label="Grupo para testar">${d.gruposDestino.map((g) => `<option value="${esc(g.id)}">${esc(g.nome)}</option>`).join('')}</select>
+        <button class="btn">${ic('send')}<span> Testar envio</span></button>
+      </form></div></section>`;
+  }
   if (!w.ativo) {
     return `<section class="secao"><div class="card qrbox" style="grid-template-columns:auto 1fr">
       <div class="bolha" style="width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)">${ic('msg')}</div>

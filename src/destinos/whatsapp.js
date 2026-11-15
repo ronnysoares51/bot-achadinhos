@@ -24,6 +24,23 @@ async function monitorado(jid) {
   return lista.includes(nomesGrupos.get(jid));
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Cópia das mensagens enviadas: quando um celular do grupo não consegue abrir a mensagem,
+// ele pede reenvio e o WhatsApp chama getMessage. Sem isso a mensagem fica em
+// "Aguardando mensagem" para os membros, mesmo com o envio dando certo.
+const enviadas = new Map();
+const MAX_ENVIADAS = 1000;
+function guardarEnviada(msg) {
+  if (!msg?.key?.id || !msg.message) return;
+  enviadas.set(msg.key.id, { message: msg.message, jid: msg.key.remoteJid, quando: Date.now(), status: 1 });
+  while (enviadas.size > MAX_ENVIADAS) enviadas.delete(enviadas.keys().next().value);
+}
+const NOMES_STATUS = { 0: 'erro', 1: 'pendente', 2: 'enviada ao servidor', 3: 'entregue', 4: 'lida', 5: 'reproduzida' };
+/** Situação de entrega de uma mensagem enviada pelo bot (pelo id). */
+export function statusEnvio(id) {
+  const e = enviadas.get(id);
+  return e ? { status: e.status, texto: NOMES_STATUS[e.status] || String(e.status) } : null;
+}
 let ultimoErro = null;
 let tentativas = 0;
 
@@ -93,8 +110,22 @@ async function conectar(opcoes) {
   } catch {
     logger = undefined;
   }
-  sock = makeWASocket({ auth: state, version, browser, logger, syncFullHistory: false, markOnlineOnConnect: false });
+  sock = makeWASocket({
+    auth: state, version, browser, logger, syncFullHistory: false, markOnlineOnConnect: false,
+    getMessage: async (key) => enviadas.get(key.id)?.message,
+    cachedGroupMetadata: async (jid) => metaGrupos.get(jid)?.meta,
+  });
   sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('messages.update', (atualizacoes) => {
+    for (const { key, update } of atualizacoes) {
+      const e = key?.fromMe && enviadas.get(key.id);
+      if (!e || update?.status == null) continue;
+      e.status = Math.max(e.status, update.status);
+      if (update.status === 0) console.error(`[whatsapp] O WhatsApp recusou a mensagem ${key.id} em ${key.remoteJid}.`);
+    }
+  });
+  sock.ev.on('groups.update', (lista) => lista.forEach((g) => metaGrupos.delete(g.id)));
+  sock.ev.on('group-participants.update', ({ id }) => metaGrupos.delete(id));
 
   // Clone de ofertas: mensagens dos grupos monitorados vão para o callback.
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -185,9 +216,18 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
   const destinos = await resolverDestinos(grupos);
   for (const [i, jid] of destinos.entries()) {
     try {
-      if (comImagem && oferta.imagem) await sock.sendMessage(jid, { image: { url: oferta.imagem }, caption: texto });
-      else await sock.sendMessage(jid, { text: texto });
-      resultados.push({ destino: `whatsapp:${jid}`, ok: true });
+      await conferirPermissao(jid);
+      let r;
+      if (comImagem && oferta.imagem) {
+        r = await sock.sendMessage(jid, { image: { url: oferta.imagem }, caption: texto }).catch((e) => {
+          console.error(`[whatsapp] imagem falhou em ${jid} (${e.message}); enviando só o texto.`);
+          return null;
+        });
+      }
+      if (!r) r = await sock.sendMessage(jid, { text: texto });
+      guardarEnviada(r);
+      console.log(`[whatsapp] enviada para ${nomesGrupos.get(jid) || jid} (id ${r?.key?.id}).`);
+      resultados.push({ destino: `whatsapp:${jid}`, ok: true, id: r?.key?.id });
     } catch (e) {
       resultados.push({ destino: `whatsapp:${jid}`, ok: false, erro: e.message });
     }
@@ -197,6 +237,41 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
     }
   }
   return resultados;
+}
+
+const metaGrupos = new Map();
+async function metadados(jid) {
+  const c = metaGrupos.get(jid);
+  if (c && Date.now() - c.quando < 10 * 60_000) return c.meta;
+  const meta = await sock.groupMetadata(jid);
+  metaGrupos.set(jid, { meta, quando: Date.now() });
+  nomesGrupos.set(jid, meta.subject);
+  return meta;
+}
+
+/** Erro claro quando o bot não está no grupo ou o grupo só deixa administradores enviarem. */
+async function conferirPermissao(jid) {
+  if (!jid.endsWith('@g.us')) return;
+  let meta;
+  try {
+    meta = await metadados(jid);
+  } catch {
+    throw new Error('o número do bot não está neste grupo (ou o ID está errado)');
+  }
+  const meus = [sock.user?.id, sock.user?.lid].filter(Boolean).map((j) => j.split(':')[0].split('@')[0]);
+  const eu = meta.participants.find((p) => [p.id, p.lid, p.phoneNumber, p.jid].filter(Boolean).some((j) => meus.includes(String(j).split(':')[0].split('@')[0])));
+  if (!eu) throw new Error(`o número do bot não participa mais do grupo "${meta.subject}"`);
+  if (meta.announce && !eu.admin) throw new Error(`no grupo "${meta.subject}" só administradores enviam: torne o número do bot administrador`);
+}
+
+/** Manda uma mensagem de teste e espera alguns segundos para ver se o WhatsApp entregou. */
+export async function testarEnvio(jid) {
+  if (!sock || !conectado) throw new Error('WhatsApp não conectado.');
+  await conferirPermissao(jid);
+  const r = await sock.sendMessage(jid, { text: '✅ Teste do Bot de Achadinhos: se você está vendo esta mensagem, o envio para este grupo funciona.' });
+  guardarEnviada(r);
+  for (let i = 0; i < 8 && (enviadas.get(r.key.id)?.status ?? 1) < 3; i++) await esperar(1000);
+  return { grupo: nomesGrupos.get(jid) || jid, ...statusEnvio(r.key.id) };
 }
 
 /** Extrai o código de um link de convite (chat.whatsapp.com/XXXX) ou devolve null. */
@@ -227,4 +302,9 @@ export async function entrarPorConvite(link) {
   cacheGrupos.quando = 0;
   if (id) nomesGrupos.set(id, info?.subject || id);
   return { id, nome: info?.subject || id, aprovacao: Boolean(info?.joinApprovalMode) };
+}
+
+/** Nome do grupo, se já conhecido (sem chamar o WhatsApp). */
+export function nomeGrupoEmCache(jid) {
+  return nomesGrupos.get(jid) || cacheGrupos.lista.find((g) => g.id === jid)?.nome || jid;
 }

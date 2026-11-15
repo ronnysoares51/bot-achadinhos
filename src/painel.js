@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ARQUIVO_CONFIG, lerConfigSalva } from './config.js';
-import { statusWhatsApp, listarGrupos, desconectarWhatsApp, entrarPorConvite } from './destinos/whatsapp.js';
+import { statusWhatsApp, listarGrupos, desconectarWhatsApp, entrarPorConvite, testarEnvio, nomeGrupoEmCache } from './destinos/whatsapp.js';
 import { listarChatsTelegram } from './telegramChats.js';
 import { listarAutomacoes, obterAutomacao, salvarAutomacao, excluirAutomacao, alternarAutomacao, normalizar } from './automacoes.js';
 import { listar, postsHoje, listarEnviados, clonesHoje, remover } from './fila.js';
@@ -126,6 +126,7 @@ function dadosInicio(msg) {
     valor: (k) => (SECRETOS.has(k) ? '' : salvo[k] ?? process.env[k] ?? (k === 'MODELO_MENSAGEM' ? MODELO_PADRAO : '')),
     enviados: listarEnviados(),
     automacoes: listarAutomacoes(),
+    gruposDestino: [...new Set(listarAutomacoes().flatMap((a) => a.destinos.whatsapp))].map((id) => ({ id, nome: nomeGrupoEmCache(id) })),
     diaHoje: diaLocal(new Date(), config.agendador.fusoHorario),
     cloneAtivo: config.clone.grupos.length > 0,
     clone: { grupos: config.clone.grupos.length, automatico: config.clone.automatico },
@@ -270,6 +271,22 @@ export function iniciarPainelWeb() {
         enviar(200, telaSalvo());
         setTimeout(() => process.exit(0), 800);
         return;
+      }
+
+      if (url.pathname === '/whatsapp/testar' && req.method === 'POST') {
+        const f = await lerForm(req);
+        let msg;
+        try {
+          const r = await testarEnvio(String(f.get('grupo') || ''));
+          msg = r.status >= 3
+            ? `Teste entregue no grupo "${r.grupo}" (${r.texto}). O envio para esse grupo está funcionando.`
+            : r.status === 0
+              ? `O WhatsApp recusou a mensagem de teste no grupo "${r.grupo}".`
+              : `Teste enviado ao grupo "${r.grupo}", situação: ${r.texto}. Confira no grupo se ele apareceu; se ficou em "Aguardando mensagem", já foi corrigido nesta versão: espere a próxima oferta.`;
+        } catch (e) {
+          msg = `Não deu para enviar: ${e.message}.`;
+        }
+        return enviar(303, '', { Location: '/?msg=' + encodeURIComponent(msg) });
       }
 
       if (url.pathname === '/whatsapp/desconectar' && req.method === 'POST') {
