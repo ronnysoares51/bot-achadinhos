@@ -125,7 +125,8 @@ export async function montarOferta(texto, { link: linkForcado, extra = {}, deOut
 
   return {
     loja,
-    titulo: manual.titulo || auto.titulo || 'Achadinho imperdível',
+    // Clonada: o nome real do produto (API/página) vale mais que a frase de chamada do outro grupo.
+    titulo: (deOutraPessoa ? auto.titulo || manual.titulo : manual.titulo || auto.titulo) || 'Achadinho imperdível',
     precoDe,
     precoPor,
     desconto,
