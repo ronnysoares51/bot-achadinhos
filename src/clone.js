@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { detectarLoja, extrairLinks } from './lojas/index.js';
 import { shopeeConfigurada } from './lojas/shopee.js';
-import { mlConectado } from './lojas/mlLinkbuilder.js';
+import { mlConectado, produtoDaPaginaSocial } from './lojas/mlLinkbuilder.js';
 import { urlFinal } from './lojas/previa.js';
 import { montarOferta, extrairDeMensagem } from './oferta.js';
 import { adicionar, jaPostada, listar, registrarClone } from './fila.js';
@@ -11,14 +11,20 @@ import { adicionar, jaPostada, listar, registrarClone } from './fila.js';
  * certamente será SEU (ou null). Shein e TikTok Shop ficam de fora: o link de outra
  * pessoa nessas lojas não pode ser trocado pelo seu, e a comissão iria para ela.
  */
-export async function linkClonavel(url, { resolver = urlFinal } = {}) {
+export async function linkClonavel(url, { resolver = urlFinal, social = produtoDaPaginaSocial } = {}) {
   const loja = detectarLoja(url);
   if (loja === 'shopee') return shopeeConfigurada() ? { loja, link: url } : { motivo: 'Shopee sem credenciais da API' };
   if (loja === 'mercadolivre') {
     if (!mlConectado() && !(config.mercadolivre.mattWord && config.mercadolivre.mattTool)) return { motivo: 'Mercado Livre não conectado (Minhas lojas)' };
-    const final = await resolver(url);
+    let final = await resolver(url);
+    // Link de outro afiliado abre o perfil social dele: pega o produto em destaque na página.
+    if (/\/social\//.test(final)) {
+      const produto = await social(final);
+      if (!produto) return { motivo: 'perfil social do ML sem produto em destaque' };
+      final = produto;
+    }
     const host = new URL(final).hostname.replace(/^www\./, '');
-    if (detectarLoja(final) !== 'mercadolivre' || host === 'meli.la' || /\/social\//.test(final)) {
+    if (detectarLoja(final) !== 'mercadolivre' || host === 'meli.la') {
       return { motivo: 'link do ML não leva a um produto' };
     }
     return { loja, link: final };
@@ -42,9 +48,13 @@ export async function processarMensagem({ texto, nomeGrupo, grupo }, { aprovar, 
   if (!links.length) return { ok: false, motivo: 'sem link de loja' };
   if (!dentroDoLimite()) return { ok: false, motivo: 'limite por hora atingido' };
 
+  const motivos = [];
   for (const url of links) {
     const alvo = await linkClonavel(url);
-    if (!alvo.link) continue;
+    if (!alvo.link) {
+      motivos.push(alvo.motivo);
+      continue;
+    }
     const oferta = await montarOferta('', { link: alvo.link, extra: extrairDeMensagem(texto), deOutraPessoa: true });
     if (jaPostada(oferta.chave) || listar().some((o) => o.chave === oferta.chave)) return { ok: false, motivo: 'repetida' };
     recentes.push(Date.now());
@@ -57,5 +67,5 @@ export async function processarMensagem({ texto, nomeGrupo, grupo }, { aprovar, 
     await aprovar?.({ ...oferta, fonte: 'clone', origem: nomeGrupo, origemId: grupo }, nomeGrupo);
     return { ok: true, destino: 'aprovacao' };
   }
-  return { ok: false, motivo: 'nenhum link pode virar seu' };
+  return { ok: false, motivo: `nenhum link pode virar seu: ${[...new Set(motivos)].join('; ')}` };
 }

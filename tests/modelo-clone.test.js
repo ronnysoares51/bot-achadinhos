@@ -57,8 +57,22 @@ test('clone recusa Shein/TikTok (link continuaria sendo do outro afiliado)', asy
 test('clone de ML resolve o meli.la e só aceita página de produto', async () => {
   const ok = await linkClonavel('https://meli.la/abc', { resolver: async () => 'https://produto.mercadolivre.com.br/MLB-123-fone?matt_word=outro' });
   assert.equal(ok.loja, 'mercadolivre');
-  const social = await linkClonavel('https://meli.la/abc', { resolver: async () => 'https://www.mercadolivre.com.br/social/fulano' });
-  assert.ok(!social.link);
+  const vazio = await linkClonavel('https://meli.la/abc', { resolver: async () => 'https://www.mercadolivre.com.br/social/fulano', social: async () => null });
+  assert.ok(!vazio.link);
+  const social = await linkClonavel('https://meli.la/abc', {
+    resolver: async () => 'https://www.mercadolivre.com.br/social/fulano?matt_word=fulano&ref=xyz',
+    social: async () => 'https://www.mercadolivre.com.br/caixa-de-som/p/MLB70102902',
+  });
+  assert.equal(social.link, 'https://www.mercadolivre.com.br/caixa-de-som/p/MLB70102902');
+});
+
+test('perfil social do ML: acha o produto em destaque no HTML', async () => {
+  const { produtoDoHtmlSocial } = await import('../src/lojas/mlLinkbuilder.js');
+  const html = '<script>{"polycards":[{"unique_id":"a","metadata":{"id":"MLB4717225295","product_id":"MLB70102902","url":"www.mercadolivre.com.br\\u002Fcaixa-de-som-sabala\\u002Fp\\u002FMLB70102902","url_fragments":"#x"}}]},{"polycards":[{"metadata":{"id":"MLB1"}}]}</script>';
+  assert.equal(produtoDoHtmlSocial(html), 'https://www.mercadolivre.com.br/caixa-de-som-sabala/p/MLB70102902');
+  assert.equal(produtoDoHtmlSocial('{"polycards":[{"metadata":{"id":"MLB55","product_id":"MLB99"}}]}'), 'https://www.mercadolivre.com.br/p/MLB99');
+  assert.equal(produtoDoHtmlSocial('{"polycards":[{"metadata":{"id":"MLB55"}}]}'), 'https://produto.mercadolivre.com.br/MLB-55');
+  assert.equal(produtoDoHtmlSocial('<html>perfil vazio</html>'), null);
 });
 
 test('clone de Shopee exige credenciais da API', async () => {

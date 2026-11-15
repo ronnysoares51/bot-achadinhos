@@ -15,7 +15,10 @@ const nomesGrupos = new Map();
 /** O grupo está na lista de monitorados (por ID ou pelo nome exato)? */
 async function monitorado(jid) {
   const lista = config.clone.grupos;
-  if (lista.includes(jid)) return true;
+  if (lista.includes(jid)) {
+    if (!nomesGrupos.has(jid)) sock.groupMetadata(jid).then((m) => nomesGrupos.set(jid, m.subject)).catch(() => {});
+    return true;
+  }
   if (!jid.endsWith('@g.us')) return false;
   if (!nomesGrupos.has(jid)) {
     const meta = await sock.groupMetadata(jid).catch(() => null);

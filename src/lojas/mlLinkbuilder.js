@@ -143,3 +143,35 @@ export async function linkDeProdutoParaTeste() {
   }
   return null;
 }
+
+/**
+ * Link de outro afiliado (meli.la) abre o "perfil social" dele, com o produto recomendado em destaque.
+ * O produto vem nos dados da página (primeira lista "polycards"): devolve a URL da página do produto.
+ */
+export function produtoDoHtmlSocial(html) {
+  const i = String(html || '').indexOf('"polycards":[{');
+  if (i < 0) return null;
+  const card = html.slice(i, i + 6000);
+  const des = (s) => s.replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+  const url = card.match(/"metadata":\{[^]*?"url":"([^"]+)"/);
+  if (url) {
+    const u = des(url[1]).split('?')[0].split('#')[0];
+    const completa = /^https?:\/\//.test(u) ? u : `https://${u.replace(/^\/+/, '')}`;
+    if (/MLB-?\d+/.test(completa)) return completa;
+  }
+  const produto = card.match(/"product_id":"(MLB\d+)"/);
+  if (produto) return `${BASE}/p/${produto[1]}`;
+  const item = card.match(/"id":"MLB(\d+)"/);
+  if (item) return `https://produto.mercadolivre.com.br/MLB-${item[1]}`;
+  return null;
+}
+
+/** Abre a página social e devolve a URL do produto em destaque (ou null). */
+export async function produtoDaPaginaSocial(url) {
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': UA, accept: 'text/html', 'accept-language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(15000) });
+    return produtoDoHtmlSocial(await r.text());
+  } catch {
+    return null;
+  }
+}
