@@ -234,6 +234,28 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
   if (!grupos.length) return [];
   if (!config.whatsapp.ativo) return [{ destino: 'whatsapp', ok: false, erro: 'WhatsApp desligado nas configurações' }];
   if (!sock || !conectado) return [{ destino: 'whatsapp', ok: false, erro: 'não conectado' }];
+  // A fila pode conter ofertas anteriores à captura das fotos originais.
+  // Resolve a prévia antes de enviar: o envio via API não espera a interface do celular.
+  if (comImagem && !oferta.fotoOriginal && !oferta.imagem && oferta.link) {
+    const { buscarPrevia } = await import('../lojas/previa.js');
+    const { produtoShopee, shopeeConfigurada } = await import('../lojas/shopee.js');
+    const previa = await buscarPrevia(oferta.link);
+    if (previa.imagem) oferta.imagem = previa.imagem;
+    if (!oferta.imagem && oferta.loja === 'shopee' && shopeeConfigurada()) {
+      const produto = await produtoShopee(previa.urlFinal || oferta.link).catch(() => null);
+      if (produto?.imagem) oferta.imagem = produto.imagem;
+    }
+    if (!oferta.imagem) {
+      const baileys = await import('baileys').catch(() => import('@whiskeysockets/baileys'));
+      const info = await baileys.getUrlInfo(previa.urlFinal || oferta.link, {
+        thumbnailWidth: 640,
+        fetchOpts: { timeout: 12000 },
+      }).catch(() => null);
+      if (info?.originalThumbnailUrl) oferta.imagem = info.originalThumbnailUrl;
+      else if (info?.jpegThumbnail?.length) oferta.fotoOriginal = Buffer.from(info.jpegThumbnail).toString('base64');
+    }
+    console.log('[whatsapp] Recuperacao da imagem antes do envio:', Boolean(oferta.fotoOriginal || oferta.imagem));
+  }
   const resultados = [];
   const destinos = await resolverDestinos(grupos);
   for (const [i, jid] of destinos.entries()) {
@@ -249,6 +271,7 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
       }
       if (!r) r = await sock.sendMessage(jid, { text: texto });
       guardarEnviada(r);
+      console.log('[whatsapp] Tipo enviado:', r?.message?.imageMessage ? 'imagem' : 'texto');
       console.log(`[whatsapp] enviada para ${nomesGrupos.get(jid) || jid} (id ${r?.key?.id}).`);
       resultados.push({ destino: `whatsapp:${jid}`, ok: true, id: r?.key?.id });
     } catch (e) {
