@@ -14,10 +14,11 @@ export function shopeeConfigurada() {
   return Boolean(config.shopee.appId && config.shopee.secret);
 }
 
-async function graphql(query, variables = {}) {
+async function graphql(query) {
   if (!shopeeConfigurada()) throw new Error('Credenciais da Shopee (SHOPEE_APP_ID e SHOPEE_SECRET) não preenchidas.');
   const { appId, secret, apiUrl } = config.shopee;
-  const payload = JSON.stringify({ query, variables });
+  // A Open API da Shopee não aceita variáveis GraphQL: os valores vão escritos na query.
+  const payload = JSON.stringify({ query });
   const ts = Math.floor(Date.now() / 1000);
   const resp = await fetch(apiUrl, {
     method: 'POST',
@@ -29,7 +30,8 @@ async function graphql(query, variables = {}) {
   });
   const json = await resp.json().catch(() => ({}));
   if (!resp.ok || json.errors?.length) {
-    throw new Error(`Shopee API: ${json.errors?.[0]?.message || resp.status}`);
+    const e = json.errors?.[0];
+    throw new Error(`Shopee API: ${e?.message || resp.status}${e?.extensions?.code ? ` (código ${e.extensions.code})` : ''}`);
   }
   return json.data;
 }
@@ -37,21 +39,19 @@ async function graphql(query, variables = {}) {
 /** Gera o link curto de afiliado (s.shopee.com.br/...) a partir de qualquer link da Shopee. */
 export async function gerarLinkShopee(url) {
   const data = await graphql(
-    'mutation($url: String!, $subIds: [String]) { generateShortLink(input: { originUrl: $url, subIds: $subIds }) { shortLink } }',
-    { url, subIds: [config.shopee.subId] },
+    `mutation { generateShortLink(input: { originUrl: ${JSON.stringify(url)}, subIds: [${JSON.stringify(config.shopee.subId)}] }) { shortLink } }`,
   );
   const link = data?.generateShortLink?.shortLink;
   if (!link) throw new Error('A Shopee não devolveu o link de afiliado.');
   return link;
 }
 
-const CAMPOS = 'itemId shopId productName priceMin priceMax priceDiscountRate imageUrl offerLink productLink commissionRate ratingStar sales shopName';
+const CAMPOS = 'itemId shopId productName priceMin priceMax priceDiscountRate commissionRate sales ratingStar imageUrl productLink offerLink';
 
 /** Busca ofertas por palavra-chave. sortType 2 = mais vendidos. */
 export async function buscarOfertasShopee(palavra, { limite = 20, sortType = 2 } = {}) {
   const data = await graphql(
-    `query($kw: String, $sort: Int, $limit: Int) { productOfferV2(keyword: $kw, sortType: $sort, page: 1, limit: $limit) { nodes { ${CAMPOS} } } }`,
-    { kw: palavra, sort: sortType, limit: limite },
+    `{ productOfferV2(keyword: ${JSON.stringify(palavra)}, sortType: ${Number(sortType)}, page: 1, limit: ${Number(limite)}) { nodes { ${CAMPOS} } } }`,
   );
   return (data?.productOfferV2?.nodes || []).map(nodeParaOferta);
 }
@@ -60,10 +60,7 @@ export async function buscarOfertasShopee(palavra, { limite = 20, sortType = 2 }
 export async function produtoShopee(url) {
   const ids = idsDaUrl(url);
   if (!ids) return null;
-  const data = await graphql(
-    `query($shop: Int64, $item: Int64) { productOfferV2(shopId: $shop, itemId: $item) { nodes { ${CAMPOS} } } }`,
-    { shop: ids.shopId, item: ids.itemId },
-  );
+  const data = await graphql(`{ productOfferV2(shopId: ${Number(ids.shopId)}, itemId: ${Number(ids.itemId)}) { nodes { ${CAMPOS} } } }`);
   const node = data?.productOfferV2?.nodes?.[0];
   return node ? nodeParaOferta(node) : null;
 }

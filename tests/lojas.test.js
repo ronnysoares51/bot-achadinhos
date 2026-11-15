@@ -75,3 +75,27 @@ test('prévia lê og:title, og:image e preço', () => {
   assert.deepEqual(lerPrevia(html), { titulo: 'Tênis & Meia', imagem: 'https://img/x.jpg', precoPor: 129.9 });
   assert.equal(lerPrevia('<script>{"price": "49,90"}</script>').precoPor, 49.9);
 });
+
+test('Shopee: query sem variáveis GraphQL e com valores escapados', async () => {
+  process.env.SHOPEE_APP_ID = '123';
+  process.env.SHOPEE_SECRET = 's';
+  const { config } = await import('../src/config.js');
+  config.shopee.appId = '123';
+  config.shopee.secret = 's';
+  const corpos = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, op) => {
+    corpos.push(JSON.parse(op.body));
+    return { ok: true, json: async () => ({ data: { productOfferV2: { nodes: [] }, generateShortLink: { shortLink: 'https://s.shopee.com.br/ok' } } }) };
+  };
+  try {
+    const { buscarOfertasShopee, gerarLinkShopee } = await import('../src/lojas/shopee.js');
+    await buscarOfertasShopee('fone "bluetooth"');
+    assert.equal(await gerarLinkShopee('https://shopee.com.br/a-i.1.2'), 'https://s.shopee.com.br/ok');
+  } finally {
+    globalThis.fetch = original;
+  }
+  for (const c of corpos) assert.deepEqual(Object.keys(c), ['query']);
+  assert.match(corpos[0].query, /keyword: "fone \\"bluetooth\\""/);
+  assert.doesNotMatch(corpos[0].query, /shopName/);
+});
