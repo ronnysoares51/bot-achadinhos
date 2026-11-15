@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ARQUIVO_CONFIG, lerConfigSalva } from './config.js';
-import { statusWhatsApp, listarGrupos } from './destinos/whatsapp.js';
+import { statusWhatsApp, listarGrupos, desconectarWhatsApp } from './destinos/whatsapp.js';
 import { listarAutomacoes, obterAutomacao, salvarAutomacao, excluirAutomacao, alternarAutomacao, normalizar } from './automacoes.js';
 import { listar, postsHoje, listarEnviados, clonesHoje, remover } from './fila.js';
 import { publicar } from './publicar.js';
@@ -158,6 +158,23 @@ export function iniciarPainelWeb() {
         if (!fs.existsSync(png)) return enviar(404, 'sem QR');
         res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
         return fs.createReadStream(png).pipe(res);
+      }
+
+      if (url.pathname === '/whatsapp/ligar' && req.method === 'POST') {
+        const atual = lerConfigSalva();
+        atual.WHATSAPP_ATIVO = 'true';
+        fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
+        fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(atual, null, 2), { mode: 0o600 });
+        enviar(200, telaSalvo());
+        setTimeout(() => process.exit(0), 800);
+        return;
+      }
+
+      if (url.pathname === '/whatsapp/desconectar' && req.method === 'POST') {
+        await desconectarWhatsApp();
+        enviar(200, telaSalvo());
+        setTimeout(() => process.exit(0), 800);
+        return;
       }
 
       if (url.pathname === '/automacao' && req.method === 'GET') {

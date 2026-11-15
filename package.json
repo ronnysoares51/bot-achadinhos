@@ -15,7 +15,7 @@
     "testar-link": "node scripts/testar-link.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.9",
+    "baileys": "^7.0.0-rc14",
     "dotenv": "^16.4.7",
     "qrcode": "^1.5.4"
   }

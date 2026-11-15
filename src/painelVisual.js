@@ -309,12 +309,7 @@ export function telaInicio(d) {
     </div>
   </section>
 
-  ${d.temQr ? `<section class="secao"><div class="card qrbox">
-    <img src="/qr.png?t=${Date.now()}" alt="QR code para conectar o WhatsApp" width="220" height="220">
-    <div><h2>${ic('qr')} Conecte o WhatsApp</h2>
-      <p class="sub">No celular do bot: <b>WhatsApp → Aparelhos conectados → Conectar aparelho</b> e aponte a câmera para o código.</p>
-      <p class="sub" style="font-size:14px">A página atualiza sozinha a cada 20 segundos.</p></div>
-    <script>setTimeout(()=>location.reload(),20000)</script></div></section>` : ''}
+  ${blocoWhatsApp(d)}
 
   ${feitos < d.passos.length ? `<section class="secao">
     <div class="cab"><h2>Primeiros passos</h2><span class="pill off">${feitos} de ${d.passos.length}</span></div>
@@ -500,4 +495,27 @@ export function telaAutomacao(d) {
   ${d.nova ? '' : `<form id="excluir" method="post" action="/automacao/acao" onsubmit="return confirm('Excluir a automação ${esc(a.nome).replace(/'/g, '')}? A fila e os envios não são apagados.')"><input type="hidden" name="id" value="${esc(a.id)}"><input type="hidden" name="acao" value="excluir"></form>`}
 </main>
 <script>(()=>{const s=document.querySelector('input[value=shopee][name=fontes]'),b=document.getElementById('busca-shopee');const f=()=>b.style.display=s.checked?'':'none';s.addEventListener('change',f);f();})()</script>`);
+}
+
+function blocoWhatsApp(d) {
+  const w = d.whatsapp;
+  if (w.conectado) return '';
+  if (!w.ativo) {
+    return `<section class="secao"><div class="card qrbox" style="grid-template-columns:auto 1fr">
+      <div class="bolha" style="width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)">${ic('msg')}</div>
+      <div><h2>Conectar o WhatsApp</h2>
+        <p class="sub">Para postar nos grupos, conecte o número do bot. Use um número só para isso: a conexão não é oficial e o WhatsApp pode bloquear números que enviam demais.</p>
+        <form method="post" action="/whatsapp/ligar" style="margin-top:12px" onsubmit="this.querySelector('button').disabled=true">
+          <button class="btn">${ic('qr')}Conectar WhatsApp</button></form></div></div></section>`;
+  }
+  return `<section class="secao"><div class="card qrbox">
+    ${d.temQr ? `<img src="/qr.png?t=${Date.now()}" alt="QR code para conectar o WhatsApp" width="220" height="220">`
+      : `<div style="width:220px;height:220px;border-radius:12px;border:1px dashed var(--border);display:grid;place-items:center;text-align:center;color:var(--muted);padding:16px">${ic('relogio')}<div style="font-size:14px">Gerando o QR code...</div></div>`}
+    <div><h2>Conecte o WhatsApp</h2>
+      <p class="sub">No celular do bot: <b>WhatsApp → ⋮ (ou Configurações) → Aparelhos conectados → Conectar um aparelho</b> e aponte a câmera para o código.</p>
+      ${w.erro ? `<div class="aviso" style="margin-top:12px">${ic('alerta')}<div>${esc(w.erro)}${w.tentativas > 3 ? ` (${w.tentativas} tentativas)` : ''}</div></div>` : ''}
+      <p class="sub" style="font-size:14px">Esta parte atualiza sozinha a cada 8 segundos.</p>
+      <form method="post" action="/whatsapp/desconectar" style="margin-top:8px"><button class="mini" title="Apaga a sessão e gera um QR novo">${ic('lixo')}<span>Recomeçar conexão</span></button></form>
+    </div>
+    <script>setTimeout(()=>location.reload(),8000)</script></div></section>`;
 }

@@ -13,26 +13,29 @@ async function main() {
   if (migrada) console.log(`[automações] Configuração antiga virou a automação "${migrada.nome}".`);
   iniciarPainelWeb();
 
-  if (!config.telegram.token) {
-    console.warn('[aviso] TELEGRAM_BOT_TOKEN vazio: preencha no painel web (ou no .env). Aguardando...');
-    return; // fica só o painel web no ar até salvar a configuração
-  }
-  if (!config.telegram.admins.length) {
-    console.warn('[aviso] TELEGRAM_ADMINS vazio: mande /start ao bot no privado para descobrir seu ID.');
-  }
-
+  let qrAvisado = false;
   await iniciarWhatsApp({
     aoReceberMensagem: async (msg) => {
       const r = await processarMensagem(msg, { aprovar: enviarParaAprovacao, avisar: avisarAdmins }).catch((e) => ({ ok: false, motivo: e.message }));
       if (r.ok) console.log(`[clone] ${msg.nomeGrupo}: oferta enviada para ${r.destino}`);
       else if (!/sem link|repetida/.test(r.motivo)) console.log(`[clone] ${msg.nomeGrupo}: ignorada (${r.motivo})`);
     },
-    aoReceberQr: (png) => {
+    aoReceberQr: () => {
+      if (qrAvisado || !config.telegram.token) return; // os QRs mudam a cada ~20 s: avisa só uma vez
+      qrAvisado = true;
       for (const id of config.telegram.admins) {
-        chamar('sendMessage', { chat_id: id, text: `📱 QR do WhatsApp gerado. Abra o painel web para escanear (arquivo ${png}).` }).catch(() => {});
+        chamar('sendMessage', { chat_id: id, text: '📱 O QR do WhatsApp está no painel web. Abra e escaneie com o número do bot.' }).catch(() => {});
       }
     },
   });
+
+  if (!config.telegram.token) {
+    console.warn('[aviso] TELEGRAM_BOT_TOKEN vazio: preencha no painel web (ou no .env). Aguardando...');
+    return; // fica só o painel web (e o WhatsApp) no ar até salvar a configuração
+  }
+  if (!config.telegram.admins.length) {
+    console.warn('[aviso] TELEGRAM_ADMINS vazio: mande /start ao bot no privado para descobrir seu ID.');
+  }
 
   iniciarAgendador(avisarAdmins);
   await iniciarPainelTelegram();

@@ -24,21 +24,76 @@ async function monitorado(jid) {
   return lista.includes(nomesGrupos.get(jid));
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+let ultimoErro = null;
+let tentativas = 0;
 
-export const statusWhatsApp = () => ({ ativo: config.whatsapp.ativo, conectado, temQr: Boolean(ultimoQr) });
+export const statusWhatsApp = () => ({ ativo: config.whatsapp.ativo, conectado, temQr: Boolean(ultimoQr), erro: ultimoErro, tentativas });
 
+// Versão do WhatsApp Web conhecida como aceita (jul/2026). Usada quando a busca automática
+// devolve uma versão mais antiga ou falha: versões velhas são recusadas pelo WhatsApp.
+const VERSAO_MINIMA = [2, 3000, 1044015310];
+const maior = (a, b) => {
+  for (let i = 0; i < 3; i++) if ((a?.[i] || 0) !== (b?.[i] || 0)) return (a?.[i] || 0) > (b?.[i] || 0) ? a : b;
+  return a;
+};
+
+async function versaoWhatsApp(baileys) {
+  let v = VERSAO_MINIMA;
+  for (const f of ['fetchLatestWaWebVersion', 'fetchLatestBaileysVersion']) {
+    if (typeof baileys[f] !== 'function') continue;
+    const r = await baileys[f]().catch(() => null);
+    if (Array.isArray(r?.version)) v = maior(r.version, v);
+  }
+  return v;
+}
+
+function explicarErro(codigo) {
+  if (codigo === 405) return 'O WhatsApp recusou a conexão (405). Tentando de novo...';
+  if (codigo === 401) return 'Sessão desconectada no celular. Gerando um QR novo...';
+  if (codigo === 403) return 'O WhatsApp bloqueou este número (403).';
+  if (codigo === 408) return 'Tempo esgotado ao conectar. Tentando de novo...';
+  if (codigo === 515) return 'Reiniciando a conexão (normal depois de escanear o QR)...';
+  return `Conexão caiu${codigo ? ` (código ${codigo})` : ''}. Tentando de novo...`;
+}
+
+/** Inicia a conexão sem nunca derrubar o resto do bot (painel e Telegram continuam no ar). */
 export async function iniciarWhatsApp(opcoes = {}) {
-  const { aoReceberQr, aoReceberMensagem } = opcoes;
   if (!config.whatsapp.ativo) return;
-  const baileys = await import('@whiskeysockets/baileys');
-  const makeWASocket = baileys.default;
-  const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = baileys;
+  try {
+    await conectar(opcoes);
+  } catch (e) {
+    ultimoErro = `Não foi possível iniciar o WhatsApp: ${e.message}`;
+    tentativas += 1;
+    console.error('[whatsapp]', ultimoErro);
+    setTimeout(() => iniciarWhatsApp(opcoes), Math.min(120_000, 10_000 * tentativas));
+  }
+}
+
+async function conectar(opcoes) {
+  const { aoReceberQr, aoReceberMensagem } = opcoes;
+  let baileys;
+  try {
+    baileys = await import('baileys');
+  } catch {
+    baileys = await import('@whiskeysockets/baileys');
+  }
+  const makeWASocket = baileys.default?.default || baileys.default || baileys.makeWASocket;
+  const { useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
   const QRCode = (await import('qrcode')).default;
 
   const { state, saveCreds } = await useMultiFileAuthState(config.whatsapp.pastaSessao);
-  const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
+  const version = await versaoWhatsApp(baileys);
+  // Identificação como app de macOS: o WhatsApp passou a recusar clientes "WEB" (erro 405).
+  const browser = Browsers?.macOS ? Browsers.macOS('Desktop') : ['Mac OS', 'Desktop', '14.4.1'];
+  console.log(`[whatsapp] Conectando (versão ${version.join('.')})...`);
 
-  sock = makeWASocket({ auth: state, version, browser: ['Bot Achadinhos', 'Chrome', '1.0'], syncFullHistory: false });
+  let logger;
+  try {
+    logger = (await import('pino')).default({ level: 'warn' });
+  } catch {
+    logger = undefined;
+  }
+  sock = makeWASocket({ auth: state, version, browser, logger, syncFullHistory: false, markOnlineOnConnect: false });
   sock.ev.on('creds.update', saveCreds);
 
   // Clone de ofertas: mensagens dos grupos monitorados vão para o callback.
@@ -59,29 +114,46 @@ export async function iniciarWhatsApp(opcoes = {}) {
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       ultimoQr = qr;
-      console.log('[whatsapp] Escaneie o QR (WhatsApp > Aparelhos conectados):');
-      console.log(await QRCode.toString(qr, { type: 'terminal', small: true }));
+      ultimoErro = null;
+      console.log('[whatsapp] QR gerado: escaneie pelo painel web (WhatsApp > Aparelhos conectados).');
       const png = path.join(config.pastaDados, 'whatsapp-qr.png');
       fs.mkdirSync(config.pastaDados, { recursive: true });
-      await QRCode.toFile(png, qr).catch(() => {});
+      await QRCode.toFile(png, qr, { width: 360, margin: 2 }).catch(() => {});
       aoReceberQr?.(png);
     }
     if (connection === 'open') {
       conectado = true;
       ultimoQr = null;
+      ultimoErro = null;
+      tentativas = 0;
       console.log('[whatsapp] Conectado.');
     }
     if (connection === 'close') {
       conectado = false;
       const codigo = lastDisconnect?.error?.output?.statusCode;
-      if (codigo === DisconnectReason.loggedOut) {
-        console.log('[whatsapp] Sessão encerrada no celular. Apague a pasta da sessão e conecte de novo.');
-      } else {
-        console.log('[whatsapp] Conexão caiu, reconectando em 5s...');
-        setTimeout(() => iniciarWhatsApp(opcoes), 5000);
+      ultimoErro = explicarErro(codigo);
+      tentativas += 1;
+      console.log(`[whatsapp] Conexão fechada (código ${codigo ?? '?'}: ${lastDisconnect?.error?.message || 'sem detalhe'}).`);
+      if (codigo === DisconnectReason?.loggedOut || codigo === 401) {
+        // Sessão encerrada no celular: apaga a sessão e gera um QR novo.
+        fs.rmSync(config.whatsapp.pastaSessao, { recursive: true, force: true });
       }
+      if (codigo === 403) return;
+      const espera = Math.min(60_000, 3000 * Math.max(1, tentativas));
+      setTimeout(() => iniciarWhatsApp(opcoes), codigo === 515 ? 1000 : espera);
     }
   });
+}
+
+/** Desconecta o número e apaga a sessão (o próximo início pede QR novo). */
+export async function desconectarWhatsApp() {
+  try {
+    await sock?.logout();
+  } catch {
+    /* já desconectado */
+  }
+  fs.rmSync(config.whatsapp.pastaSessao, { recursive: true, force: true });
+  fs.rmSync(path.join(config.pastaDados, 'whatsapp-qr.png'), { force: true });
 }
 
 let cacheGrupos = { quando: 0, lista: [] };
