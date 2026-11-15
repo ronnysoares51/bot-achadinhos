@@ -11,7 +11,7 @@ import { MODELO_PADRAO } from './formatar.js';
 import { diaLocal } from './publicar.js';
 import { NOMES } from './lojas/index.js';
 import { CHAVES, SECRETOS, telaLogin, telaInicio, telaSalvo, telaAutomacao, telaLojas, telaClone } from './painelVisual.js';
-import { gerarMeliLaUm, normalizarCookies } from './lojas/mlLinkbuilder.js';
+import { gerarMeliLaUm, normalizarCookies, linkDeProdutoParaTeste } from './lojas/mlLinkbuilder.js';
 
 export { CAMPOS } from './painelVisual.js';
 
@@ -225,11 +225,14 @@ export function iniciarPainelWeb() {
       if (url.pathname === '/lojas/testar-ml' && req.method === 'POST') {
         salvarLojas(await lerForm(req));
         let teste;
+        const produto = (await linkDeProdutoParaTeste()) || 'https://www.mercadolivre.com.br/ofertas';
         try {
-          const link = await gerarMeliLaUm('https://www.mercadolivre.com.br/ofertas');
+          const link = await gerarMeliLaUm(produto);
           teste = { ok: true, texto: `Funcionou! O Mercado Livre gerou ${link} na sua conta. A partir de agora todo link do ML sai com a sua comissão.` };
         } catch (e) {
-          teste = { ok: false, texto: `Não deu certo: ${e.message}` };
+          teste = e.naoProduto
+            ? { ok: true, texto: 'Conectado! O Mercado Livre aceitou a sua conta e a etiqueta. (O teste não achou um produto para gerar um meli.la de exemplo, mas os links de produto das ofertas vão sair com a sua comissão.)' }
+            : { ok: false, texto: `Não deu certo: ${e.message}` };
         }
         return enviar(200, telaLojas(dadosLojas(null, teste)));
       }

@@ -78,7 +78,9 @@ function sessaoExpirada() {
 
 /** Gera um meli.la para cada URL (mesma ordem). */
 export async function gerarMeliLa(urls, { etiqueta = config.mercadolivre.etiqueta, cookies = config.mercadolivre.cookies } = {}) {
-  if (!etiqueta || !cookies) throw new Error('Mercado Livre não conectado (Minhas lojas).');
+  if (!etiqueta && !cookies) throw new Error('Mercado Livre não conectado: preencha a etiqueta e envie o cookies.txt em Minhas lojas.');
+  if (!etiqueta) throw new Error('Falta a etiqueta de afiliado do Mercado Livre (aparece em "Etiqueta em uso" no gerador de links).');
+  if (!cookies) throw new Error('Faltam os cookies do Mercado Livre: envie o cookies.txt em Minhas lojas.');
   const ck = normalizarCookies(cookies);
   const tentar = async (csrf) => {
     const headers = {
@@ -112,6 +114,12 @@ export async function gerarMeliLa(urls, { etiqueta = config.mercadolivre.etiquet
     throw new Error(`Gerador de links do Mercado Livre respondeu ${res.status}: ${(res.json?.message || res.texto || '').slice(0, 160)}`);
   }
   const links = (res.json.urls || []).map((u) => u?.short_url || '');
+  const naoProduto = (res.json.urls || []).find((u) => /type must be/i.test(u?.message || ''));
+  if (naoProduto) {
+    const e = new Error(`O link ${naoProduto.origin_url} não é de um produto (o Mercado Livre só gera meli.la para páginas de produto).`);
+    e.naoProduto = true;
+    throw e;
+  }
   if (links.length !== urls.length || links.some((l) => !/^https:\/\/meli\.la\//.test(l))) {
     throw new Error(`Gerador do Mercado Livre não devolveu meli.la (resposta: ${JSON.stringify(res.json).slice(0, 160)}).`);
   }
@@ -121,4 +129,17 @@ export async function gerarMeliLa(urls, { etiqueta = config.mercadolivre.etiquet
 export async function gerarMeliLaUm(url, opcoes) {
   const [link] = await gerarMeliLa([url], opcoes);
   return link;
+}
+
+/** Pega um link de produto qualquer da página de ofertas (usado no teste de conexão). */
+export async function linkDeProdutoParaTeste() {
+  try {
+    const r = await fetch(`${BASE}/ofertas`, { headers: { 'user-agent': UA, accept: 'text/html', 'accept-language': 'pt-BR' } });
+    const html = await r.text();
+    const m = html.match(/https:\/\/(?:www|produto)\.mercadoli[vb]re\.com\.br\/[^"'\s<>]*MLB-?\d{6,}[^"'\s<>]*/i);
+    if (m) return m[0].replace(/\\u002F/g, '/').split('#')[0];
+  } catch {
+    /* sem rede ou bloqueado */
+  }
+  return null;
 }
