@@ -1,0 +1,15 @@
+# Use quando o VPS já tem um proxy (Nginx, Traefik, Caddy) nas portas 80/443:
+#   docker compose -f docker-compose.sem-caddy.yml up -d --build
+# O painel fica em 127.0.0.1:3010; aponte o proxy existente do domínio para lá.
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - dados:/app/dados
+    ports:
+      - "127.0.0.1:3010:3000"
+
+volumes:
+  dados:

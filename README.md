@@ -70,6 +70,18 @@ docker compose up -d
 docker compose logs -f   # QR do WhatsApp aparece aqui
 ```
 
+## Painel web
+
+Com `PAINEL_SENHA` preenchido, o bot abre um painel na porta `3000` (em produção: **https://achadinhos.rstvquix.com**):
+
+- status do Telegram, do WhatsApp, da fila e dos posts do dia;
+- **QR do WhatsApp** para escanear pelo navegador;
+- todas as configurações (tokens, lojas, horários). Ao salvar, o bot reinicia sozinho com os novos valores (ficam em `dados/config.json`, com prioridade sobre o `.env`).
+
+## Deploy no VPS (Hostinger)
+
+Veja [docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md).
+
 ## Comandos no Telegram
 
 | Comando | O que faz |

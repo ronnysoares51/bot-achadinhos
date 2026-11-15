@@ -5,7 +5,23 @@ try {
   /* sem dotenv: usa só as variáveis de ambiente */
 }
 
-const lista = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Configurações salvas pelo painel web (dados/config.json) têm prioridade sobre o .env.
+export const ARQUIVO_CONFIG = path.join(process.env.PASTA_DADOS || 'dados', 'config.json');
+export function lerConfigSalva() {
+  try {
+    return JSON.parse(fs.readFileSync(ARQUIVO_CONFIG, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+for (const [k, v] of Object.entries(lerConfigSalva())) {
+  if (v !== undefined && v !== null && String(v) !== '') process.env[k] = String(v);
+}
+
+const lista =(v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 const num = (v, padrao) => (v === undefined || v === '' ? padrao : Number(v));
 
 export const config = {
@@ -56,4 +72,8 @@ export const config = {
     intervaloHoras: num(process.env.AUTO_SHOPEE_INTERVALO_H, 3),
   },
   pastaDados: process.env.PASTA_DADOS || 'dados',
+  painel: {
+    porta: num(process.env.PAINEL_PORTA, 3000),
+    senha: process.env.PAINEL_SENHA || '',
+  },
 };
