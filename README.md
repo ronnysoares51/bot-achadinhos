@@ -72,7 +72,7 @@ docker compose logs -f   # QR do WhatsApp aparece aqui
 
 ## Painel web
 
-Com `PAINEL_SENHA` preenchido, o bot abre um painel na porta `3000` (em produção: **https://achadinhos.rstvquix.com**):
+Com `PAINEL_SENHA` preenchido, o bot abre um painel na porta `3000` (em produção: **http://achadinhos.rstvquix.com:3010**):
 
 - status do Telegram, do WhatsApp, da fila e dos posts do dia;
 - **QR do WhatsApp** para escanear pelo navegador;

@@ -1,6 +1,7 @@
-# Bot + painel web. O painel fica em 127.0.0.1:3010 e o HTTPS é feito pelo proxy que já
-# existe no VPS (Caddy do projeto evolution-api), com o bloco achadinhos.rstvquix.com.
-# Em um servidor sem proxy, use docker-compose.com-caddy.yml (HTTPS automático próprio).
+# Bot + painel web, isolado: não usa nem altera nenhum outro projeto do VPS.
+# Painel em http://achadinhos.rstvquix.com:3010 (porta própria; as portas 80/443 do VPS
+# pertencem a outro projeto e não são tocadas).
+# Em um servidor com 80/443 livres, use docker-compose.com-caddy.yml (HTTPS automático).
 services:
   bot:
     build: https://github.com/ronnysoares51/bot-achadinhos.git#main
@@ -14,7 +15,7 @@ services:
     volumes:
       - dados:/app/dados
     ports:
-      - "127.0.0.1:3010:3000"
+      - "3010:3000"
 
 volumes:
   dados:

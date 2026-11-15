@@ -188,7 +188,8 @@ export function iniciarPainelWeb() {
           return enviar(401, telaLogin('Senha incorreta.'));
         }
         tentativas.delete(ip);
-        return enviar(303, '', { Location: '/', 'Set-Cookie': `sessao=${tokenSessao()}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000` });
+        const https = req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https';
+        return enviar(303, '', { Location: '/', 'Set-Cookie': `sessao=${tokenSessao()}; HttpOnly; ${https ? 'Secure; ' : ''}SameSite=Strict; Path=/; Max-Age=2592000` });
       }
 
       if (!logado(req)) return enviar(200, telaLogin());

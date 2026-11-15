@@ -7,26 +7,12 @@ Endereço do painel: **https://achadinhos.rstvquix.com** (registro DNS tipo A `a
 
 ## Como está montado neste VPS
 
-As portas 80/443 do VPS já são do **Caddy do projeto `evolution-api`**, que faz o HTTPS dos sites. O bot não sobe outro Caddy:
+As portas 80/443 do VPS pertencem a outro projeto (Caddy do `evolution-api`). **O bot não altera nenhum projeto existente**: ele roda isolado no próprio projeto Docker `bot-achadinhos`, com o painel na porta própria **3010**:
 
-- projeto Docker `bot-achadinhos` (Gerenciador Docker → Compose a partir de URL →
-  `https://github.com/ronnysoares51/bot-achadinhos/blob/main/docker-compose.yml`);
-- o painel fica em `127.0.0.1:3010` e na rede do Caddy com o nome `bot-achadinhos`;
-- o Caddy existente recebe o bloco:
+- Gerenciador Docker → Compose a partir de URL → `https://github.com/ronnysoares51/bot-achadinhos/blob/main/docker-compose.yml`, nome `bot-achadinhos`;
+- painel: **http://achadinhos.rstvquix.com:3010**.
 
-```
-achadinhos.rstvquix.com {
-	reverse_proxy bot-achadinhos:3000
-}
-```
-
-Isso é feito pelo script (backup, validação e recarga sem derrubar os outros sites):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ronnysoares51/bot-achadinhos/main/scripts/ligar-subdominio.sh | bash
-```
-
-**Depois de reimplantar o bot, rode o script de novo** (ele refaz a ligação de rede; o bloco no Caddyfile já fica salvo).
+Para ter HTTPS sem porta (https://achadinhos.rstvquix.com) seria preciso acrescentar o subdomínio no Caddy do evolution-api — só faça isso se quiser mexer naquele projeto.
 
 ## Senha do painel
 
