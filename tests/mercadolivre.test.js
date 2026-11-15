@@ -54,3 +54,24 @@ test('link de produto do ML vira meli.la da sua conta; meli.la colado por você 
   assert.equal(r.link, 'https://meli.la/MEU');
   assert.equal((await converterLink('https://meli.la/JaEhMeu')).link, 'https://meli.la/JaEhMeu');
 });
+
+test('cookies.txt (Netscape) da extensão Get cookies.txt LOCALLY: fica só o que é do Mercado Livre', () => {
+  const txt = [
+    '# Netscape HTTP Cookie File',
+    '# https://curl.haxx.se/rfc/cookie_spec.html',
+    '.mercadolivre.com.br\tTRUE\t/\tTRUE\t1830000000\tssid\tABC123',
+    '#HttpOnly_.mercadolivre.com.br\tTRUE\t/\tTRUE\t1830000000\torguseridp\t999',
+    'www.mercadolivre.com.br\tFALSE\t/\tFALSE\t0\t_csrf\txyz',
+    '.google.com\tTRUE\t/\tTRUE\t1830000000\tNID\tnao-pode',
+    '',
+  ].join('\n');
+  assert.equal(ml.normalizarCookies(txt), 'ssid=ABC123; orguseridp=999; _csrf=xyz');
+});
+
+test('JSON com domínio: filtra Mercado Livre', () => {
+  const json = JSON.stringify([
+    { domain: '.mercadolivre.com.br', name: 'ssid', value: '1' },
+    { domain: '.facebook.com', name: 'c_user', value: 'x' },
+  ]);
+  assert.equal(ml.normalizarCookies(json), 'ssid=1');
+});

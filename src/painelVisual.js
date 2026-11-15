@@ -537,8 +537,13 @@ export function telaLojas(d) {
       ${campo('ML_MATT_TOOL', 'matt_tool (opcional, plano B)', l.ml.mattTool, { ajuda: 'Só se quiser que, quando o gerador falhar, o link use parâmetros.' })}
     </div>
     <div><label class="l" for="ML_COOKIES">Cookies da sua conta do Mercado Livre ${l.ml.temCookies ? '<span class="ja">salvo</span>' : ''}</label>
-      <textarea class="in" id="ML_COOKIES" name="ML_COOKIES" style="min-height:90px" placeholder="${l.ml.temCookies ? 'Já salvos. Cole de novo só se a sessão expirar.' : 'Cole aqui (formato Header String ou JSON)'}"></textarea>
-      <span class="ajuda"><b>Como pegar:</b> no computador, entre em <b>mercadolivre.com.br/afiliados</b> com a sua conta → instale a extensão <b>Cookie-Editor</b> no Chrome → abra-a nessa página → <b>Export → Header String</b> → cole aqui. Os cookies ficam só no seu servidor. Se você sair da conta no navegador, eles expiram e é só colar de novo.</span></div>
+      <textarea class="in" id="ML_COOKIES" name="ML_COOKIES" style="min-height:90px" placeholder="${l.ml.temCookies ? 'Já salvos. Envie de novo só se a sessão expirar.' : 'Envie o arquivo cookies.txt ou cole aqui'}"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <label class="btn sec" style="min-height:44px;cursor:pointer">${ic('envio')}<span>Enviar arquivo cookies.txt</span><input type="file" id="arquivoCookies" accept=".txt,.json,text/plain,application/json" style="display:none"></label>
+        <span class="ajuda" id="arquivoNome" style="margin:0"></span>
+      </div>
+      <span class="ajuda"><b>Como pegar (igual ao DisparaPromo):</b> no Chrome do computador, entre em <b>mercadolivre.com.br/afiliados</b> com a sua conta → clique na extensão <b>Get cookies.txt LOCALLY</b> → <b>Export</b> (baixa o cookies.txt) → envie o arquivo aqui. Também aceita JSON e o formato "Header String" do Cookie-Editor. Só os cookies do Mercado Livre são guardados, e só no seu servidor. Se você sair da conta no navegador, eles expiram e é só enviar de novo.</span>
+      <script>(()=>{const f=document.getElementById('arquivoCookies'),ta=document.getElementById('ML_COOKIES'),n=document.getElementById('arquivoNome');f.addEventListener('change',async()=>{const a=f.files[0];if(!a)return;ta.value=await a.text();n.textContent='✓ '+a.name+' carregado — agora clique em Testar conexão';});})()</script></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn sec" formaction="/lojas/testar-ml" formmethod="post">${ic('raio')}Testar conexão</button>
     </div>

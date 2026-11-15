@@ -15,19 +15,48 @@ export function mlConectado() {
   return Boolean(config.mercadolivre.etiqueta && config.mercadolivre.cookies);
 }
 
-/** Aceita o cabeçalho Cookie colado, ou o JSON exportado por extensões de cookies. */
-export function normalizarCookies(texto) {
-  const t = String(texto || '').trim();
+const DOMINIO_ML = /(^|\.)mercadoli[vb]re\.com(\.br)?$|(^|\.)mercadopago\.com(\.br)?$/i;
+
+/**
+ * Aceita os cookies em qualquer formato comum:
+ * - arquivo cookies.txt (formato Netscape) da extensão "Get cookies.txt LOCALLY";
+ * - JSON (Cookie-Editor, Get cookies.txt LOCALLY em JSON, EditThisCookie);
+ * - cabeçalho "Cookie: a=1; b=2".
+ * Nos formatos com domínio, fica só o que é do Mercado Livre (dominio = regex).
+ */
+export function normalizarCookies(texto, dominio = DOMINIO_ML) {
+  const t = String(texto || '').replace(/^﻿/, '').trim();
   if (!t) return '';
+  const juntar = (lista) => {
+    const vistos = new Map();
+    for (const c of lista) if (c.name && (!c.domain || dominio.test(String(c.domain).replace(/^\./, '')))) vistos.set(c.name, c.value ?? '');
+    return [...vistos].map(([n, v]) => `${n}=${v}`).join('; ');
+  };
+
   if (t.startsWith('[') || t.startsWith('{')) {
     try {
       const lista = JSON.parse(t);
       const arr = Array.isArray(lista) ? lista : lista.cookies || [];
-      return arr.filter((c) => c && c.name).map((c) => `${c.name}=${c.value}`).join('; ');
+      return juntar(arr.map((c) => ({ name: c.name, value: c.value, domain: c.domain })));
     } catch {
       return t;
     }
   }
+
+  // Netscape cookies.txt: domínio, subdomínios, caminho, seguro, validade, nome, valor (separados por TAB)
+  const linhas = t.split(/\r?\n/);
+  if (linhas.some((l) => l.split('\t').length >= 7)) {
+    const cookies = [];
+    for (const linha of linhas) {
+      const l = linha.startsWith('#HttpOnly_') ? linha.slice('#HttpOnly_'.length) : linha;
+      if (!l.trim() || l.startsWith('#')) continue;
+      const p = l.split('\t');
+      if (p.length < 7) continue;
+      cookies.push({ domain: p[0], name: p[5], value: p.slice(6).join('\t').trim() });
+    }
+    return juntar(cookies);
+  }
+
   return t.replace(/^cookie:\s*/i, '').replace(/\s*\n\s*/g, '; ');
 }
 
