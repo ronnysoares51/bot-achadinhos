@@ -1,8 +1,0 @@
-{$DOMINIO} {
-	encode gzip
-	reverse_proxy bot:3000
-	header {
-		Strict-Transport-Security "max-age=31536000"
-		-Server
-	}
-}

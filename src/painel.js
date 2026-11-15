@@ -50,8 +50,21 @@ const CHAVES = new Set(CAMPOS.flatMap(([, c]) => c.map(([k]) => k)));
 const SECRETOS = new Set(CAMPOS.flatMap(([, c]) => c.filter((x) => x[2]).map(([k]) => k)));
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const segredoSessao = crypto.randomBytes(32);
-const tokenSessao = () => crypto.createHmac('sha256', segredoSessao).update(config.painel.senha).digest('hex');
+// Segredo de sessão guardado em disco: o login continua valendo depois que o bot reinicia.
+let segredoSessao = null;
+function segredo() {
+  if (segredoSessao) return segredoSessao;
+  const arq = path.join(config.pastaDados, 'sessao.key');
+  try {
+    segredoSessao = fs.readFileSync(arq);
+  } catch {
+    segredoSessao = crypto.randomBytes(32);
+    fs.mkdirSync(config.pastaDados, { recursive: true });
+    fs.writeFileSync(arq, segredoSessao, { mode: 0o600 });
+  }
+  return segredoSessao;
+}
+const tokenSessao = () => crypto.createHmac('sha256', segredo()).update(config.painel.senha).digest('hex');
 const tentativas = new Map();
 
 function iguais(a, b) {
@@ -135,11 +148,25 @@ function telaInicio(msg) {
   <p class="k" style="margin-top:24px"><a href="/sair">Sair</a></p>`);
 }
 
-export function iniciarPainelWeb() {
-  if (!config.painel.senha) {
-    console.warn('[painel] PAINEL_SENHA vazio: painel web desligado.');
-    return;
+/** Sem PAINEL_SENHA, cria uma senha aleatória na primeira vez e guarda em dados/painel-senha.txt. */
+export function garantirSenha() {
+  if (config.painel.senha) return;
+  const arq = path.join(config.pastaDados, 'painel-senha.txt');
+  try {
+    config.painel.senha = fs.readFileSync(arq, 'utf8').trim();
+  } catch {
+    /* ainda não existe */
   }
+  if (!config.painel.senha) {
+    config.painel.senha = crypto.randomBytes(9).toString('base64url');
+    fs.mkdirSync(config.pastaDados, { recursive: true });
+    fs.writeFileSync(arq, config.painel.senha, { mode: 0o600 });
+  }
+  console.log(`[painel] Senha do painel: ${config.painel.senha}  (guardada em ${arq})`);
+}
+
+export function iniciarPainelWeb() {
+  garantirSenha();
   const servidor = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const enviar = (codigo, html, extra = {}) => {

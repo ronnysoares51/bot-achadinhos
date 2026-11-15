@@ -11,7 +11,6 @@ async function main() {
 
   if (!config.telegram.token) {
     console.warn('[aviso] TELEGRAM_BOT_TOKEN vazio: preencha no painel web (ou no .env). Aguardando...');
-    if (!config.painel.senha) process.exit(1);
     return; // fica só o painel web no ar até salvar a configuração
   }
   if (!config.telegram.admins.length) {

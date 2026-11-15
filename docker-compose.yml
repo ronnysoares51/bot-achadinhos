@@ -1,25 +1,30 @@
+# Deploy completo: bot + painel web + HTTPS automático (Caddy / Let's Encrypt).
+# Funciona tanto pelo Gerenciador Docker da Hostinger (Compose a partir de URL) quanto com
+# `docker compose up -d --build`. As configurações são feitas no painel web.
+# Se o VPS já usar as portas 80/443, use docker-compose.sem-caddy.yml.
 services:
   bot:
-    build: .
+    build: https://github.com/ronnysoares51/bot-achadinhos.git#main
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - PASTA_DADOS=/app/dados
+      - PAINEL_PORTA=3000
     volumes:
       - dados:/app/dados
     expose:
       - "3000"
 
-  # HTTPS automático (Let's Encrypt) para o painel web.
-  # Se o VPS já tiver outro proxy nas portas 80/443, use docker-compose.sem-caddy.yml (veja docs/DEPLOY_VPS.md).
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMINIO:-achadinhos.rstvquix.com} --to bot:3000
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      - DOMINIO=${DOMINIO:-achadinhos.rstvquix.com}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_dados:/data
       - caddy_config:/config
     depends_on:
