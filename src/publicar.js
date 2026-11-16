@@ -4,6 +4,7 @@ import { publicarNosCanais } from './destinos/telegram.js';
 import { publicarNosGrupos } from './destinos/whatsapp.js';
 import { marcarPostada } from './fila.js';
 import { listarAutomacoes, registrarEnvio } from './automacoes.js';
+import { garantirFoto } from './imagem.js';
 
 export function diaLocal(data = new Date(), fuso = 'America/Sao_Paulo') {
   return new Intl.DateTimeFormat('en-CA', { timeZone: fuso, year: 'numeric', month: '2-digit', day: '2-digit' }).format(data);
@@ -20,6 +21,7 @@ export function diaSemanaLocal(data = new Date(), fuso = 'America/Sao_Paulo') {
 
 /** Envia a oferta para os destinos de UMA automação, com o modelo e o formato dela. */
 export async function publicarNaAutomacao(oferta, a) {
+  if (a.formato !== 'texto') await garantirFoto(oferta);
   const modelo = a.modelo || process.env.MODELO_MENSAGEM;
   const comImagem = a.formato !== 'texto';
   const tg = await publicarNosCanais(oferta, formatarTelegram(oferta, modelo), a.destinos.telegram, { comImagem });
@@ -38,6 +40,7 @@ export async function publicarNaAutomacao(oferta, a) {
  * Sem automações, usa os canais/grupos antigos da configuração.
  */
 export async function publicar(oferta, fuso = config.agendador.fusoHorario) {
+  await garantirFoto(oferta);
   const ativas = listarAutomacoes().filter((a) => a.ativa);
   const dia = diaLocal(new Date(), fuso);
   const resultados = [];
