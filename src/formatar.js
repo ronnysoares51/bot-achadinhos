@@ -13,15 +13,20 @@ export const VARIAVEIS = {
   obs: 'Observação (ex.: frete grátis)',
   nota: 'Nota de avaliação (4,8)',
   vendidos: 'Quantidade vendida',
+  consulte: 'Aviso quando não há preço (Confira o preço no link)',
   link: 'Seu link de afiliado',
 };
 
 export const MODELO_PADRAO = `🔥 *{titulo}*
 
 ~De {preco_antigo}~
-💰 *Por {preco}* ({desconto} OFF)
+💰 *Por {preco}*
+💰 {consulte}
+🏷️ {desconto} OFF
+💸 Você economiza {economia}
 🎟️ Cupom: *{cupom}*
-⭐ {nota} · {vendidos} vendidos
+⭐ Nota {nota}
+📦 {vendidos} vendidos
 ℹ️ {obs}
 
 🛒 {loja}
@@ -50,6 +55,7 @@ export function valores(o) {
     obs: o.obs || '',
     nota: o.nota ? Number(o.nota).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '',
     vendidos: vendidos ? (vendidos >= 1000 ? `${Math.floor(vendidos / 1000)} mil+` : String(vendidos)) : '',
+    consulte: o.precoPor ? '' : 'Confira o preço atual no link',
     link: o.link || '',
   };
 }
