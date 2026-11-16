@@ -258,11 +258,18 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
   }
   const resultados = [];
   const destinos = await resolverDestinos(grupos);
+  const cartao = comImagem ? await montarCartao(oferta, texto) : null;
   for (const [i, jid] of destinos.entries()) {
     try {
       await conferirPermissao(jid);
       let r;
-      if (comImagem && (oferta.fotoOriginal || oferta.imagem)) {
+      if (cartao) {
+        r = await sock.sendMessage(jid, cartao).catch((e) => {
+          console.error(`[whatsapp] cartao falhou em ${jid} (${e.message}); tentando imagem com legenda.`);
+          return null;
+        });
+      }
+      if (!r && comImagem && (oferta.fotoOriginal || oferta.imagem)) {
         const image = oferta.fotoOriginal ? Buffer.from(oferta.fotoOriginal, 'base64') : { url: oferta.imagem };
         r = await sock.sendMessage(jid, { image, caption: texto }).catch((e) => {
           console.error(`[whatsapp] imagem falhou em ${jid} (${e.message}); enviando só o texto.`);
@@ -271,7 +278,7 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
       }
       if (!r) r = await sock.sendMessage(jid, { text: texto });
       guardarEnviada(r);
-      console.log('[whatsapp] Tipo enviado:', r?.message?.imageMessage ? 'imagem' : 'texto');
+      console.log('[whatsapp] Tipo enviado:', r?.message?.imageMessage ? 'imagem' : r?.message?.extendedTextMessage?.thumbnailDirectPath ? 'cartao (foto grande)' : 'texto');
       console.log(`[whatsapp] enviada para ${nomesGrupos.get(jid) || jid} (id ${r?.key?.id}).`);
       resultados.push({ destino: `whatsapp:${jid}`, ok: true, id: r?.key?.id });
     } catch (e) {
@@ -283,6 +290,44 @@ export async function publicarNosGrupos(oferta, texto, grupos = config.whatsapp.
     }
   }
   return resultados;
+}
+
+/**
+ * Cartao de link do WhatsApp: foto grande na largura toda da bolha e o texto embaixo
+ * (o formato "imagem + legenda" encolhe a bolha quando a foto e pequena).
+ * Desligue com WHATSAPP_CARTAO=false para voltar ao formato antigo.
+ */
+async function montarCartao(oferta, texto) {
+  if (process.env.WHATSAPP_CARTAO === 'false' || !oferta.link) return null;
+  try {
+    const baileys = await import('baileys').catch(() => import('@whiskeysockets/baileys'));
+    let foto = oferta.fotoOriginal ? Buffer.from(oferta.fotoOriginal, 'base64') : null;
+    if (!foto && oferta.imagem) {
+      const r = await fetch(oferta.imagem, { signal: AbortSignal.timeout(12000) });
+      if (r.ok) foto = Buffer.from(await r.arrayBuffer());
+    }
+    if (!foto) return null;
+    const { imageMessage } = await baileys.prepareWAMessageMedia(
+      { image: foto },
+      { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' },
+    );
+    if (!imageMessage) return null;
+    const link = oferta.link;
+    return {
+      text: texto.includes(link) ? texto : `${texto}\n\n${link}`,
+      linkPreview: {
+        'canonical-url': link,
+        'matched-text': link,
+        title: '',
+        description: '',
+        jpegThumbnail: imageMessage.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined,
+        highQualityThumbnail: imageMessage,
+      },
+    };
+  } catch (e) {
+    console.error('[whatsapp] nao foi possivel montar o cartao:', e.message);
+    return null;
+  }
 }
 
 const metaGrupos = new Map();
@@ -350,7 +395,7 @@ export async function entrarPorConvite(link) {
   return { id, nome: info?.subject || id, aprovacao: Boolean(info?.joinApprovalMode) };
 }
 
-/** Nome do grupo, se já conhecido (sem chamar o WhatsApp). */
+/** Nome do grupo, se já conhecido (sem chamar o WhatsApp) — */
 export function nomeGrupoEmCache(jid) {
   return nomesGrupos.get(jid) || cacheGrupos.lista.find((g) => g.id === jid)?.nome || jid;
 }
