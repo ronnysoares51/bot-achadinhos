@@ -31,12 +31,55 @@ export async function baixarImagem(url, { timeoutMs = 15000 } = {}) {
   }
 }
 
+// ------------------------------------------------------------------ Mercado Livre
+// A foto do ML vem em vários tamanhos, pelo final do nome: "-I" é miniatura (~90 px), "-O" é a
+// original e "2X_...-F" a grande. A prévia de link e alguns grupos usam a miniatura, e a página do
+// produto costuma bloquear o robô; então a foto grande é montada a partir de qualquer endereço do
+// ML que aparecer, e também pedida à API pública do ML pelo código do anúncio.
+
+const FOTO_ML = /^(https?:\/\/[^/]*mlstatic\.com\/)(?:D_[A-Z0-9_]*?)?(\d+-ML[A-Z]\d+_\d+)-[A-Z]\.(?:jpe?g|webp|png)(?:\?.*)?$/i;
+
+/** Endereços da mesma foto do ML, do maior para o menor (em JPG: o WhatsApp não mostra WebP como foto). */
+export function fotosGrandesMl(url) {
+  const m = String(url || '').match(FOTO_ML);
+  if (!m) return [];
+  const [, base, id] = m;
+  return [`${base}D_NQ_NP_2X_${id}-F.jpg`, `${base}D_NQ_NP_${id}-O.jpg`, `${base}D_${id}-O.jpg`];
+}
+
+/** Código do anúncio ou do produto de catálogo do ML num link ({ tipo: 'items'|'products', id }). */
+export function codigoMl(url) {
+  const texto = decodeURIComponent(String(url || ''));
+  const catalogo = texto.match(/\/p\/(ML[A-Z]\d{5,})/i);
+  if (catalogo) return { tipo: 'products', id: catalogo[1].toUpperCase() };
+  const item = texto.match(/(?:wid=|item_id[:=])(ML[A-Z])-?(\d{5,})/i) || texto.match(/\b(ML[A-Z])-?(\d{6,})/i);
+  if (item) return { tipo: 'items', id: `${item[1].toUpperCase()}${item[2]}` };
+  return null;
+}
+
+async function lerJson(url) {
+  try {
+    const resp = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+    return resp.ok ? await resp.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fotos do anúncio pela API pública do ML. Lista vazia quando ela não responde. */
+export async function fotosDaApiMl(link, { json = lerJson } = {}) {
+  const codigo = codigoMl(link);
+  if (!codigo) return [];
+  const dados = await json(`https://api.mercadolibre.com/${codigo.tipo}/${codigo.id}`);
+  return (dados?.pictures || []).map((p) => p.secure_url || p.url).filter(Boolean).slice(0, 1);
+}
+
 /**
  * Deixa oferta.fotoOriginal com a melhor foto disponível (base64).
  * Ordem: foto já boa > imagem da oferta > imagem da página do produto > miniatura (último recurso).
  * Idempotente: só tenta uma vez por oferta. Não lança erro.
  */
-export async function garantirFoto(oferta, { baixar = baixarImagem, previa = buscarPrevia } = {}) {
+export async function garantirFoto(oferta, { baixar = baixarImagem, previa = buscarPrevia, apiMl = fotosDaApiMl } = {}) {
   if (!oferta || oferta.fotoTentada) return oferta;
   const atual = bytesDe(oferta.fotoOriginal);
   if (atual >= TAMANHO_BOM) {
@@ -48,20 +91,29 @@ export async function garantirFoto(oferta, { baixar = baixarImagem, previa = bus
     if (r && (!melhor || r.bytes > melhor.bytes)) melhor = r;
   };
 
-  const urls = [];
-  if (oferta.imagem) urls.push(oferta.imagem);
-  for (const url of urls) {
-    considerar(await baixar(url));
-    if (melhor?.bytes >= TAMANHO_BOM) break;
+  const tentar = async (urls) => {
+    for (const url of urls) {
+      if (melhor?.bytes >= TAMANHO_BOM) return;
+      considerar(await baixar(url));
+    }
+  };
+  const doMl = oferta.loja === 'mercadolivre' || /mercadoli[bv]re|meli\.la|mlstatic/i.test(`${oferta.link} ${oferta.urlProduto} ${oferta.imagem}`);
+  if (oferta.imagem) await tentar([...fotosGrandesMl(oferta.imagem), oferta.imagem]);
+  if (doMl && !(melhor?.bytes >= TAMANHO_BOM)) {
+    for (const alvo of [oferta.urlProduto, oferta.link].filter(Boolean)) {
+      const fotos = await apiMl(alvo).catch(() => []);
+      for (const f of fotos) await tentar([...fotosGrandesMl(f), f]);
+      if (fotos.length) break;
+    }
   }
   if (!(melhor?.bytes >= TAMANHO_BOM)) {
     const alvo = oferta.urlProduto || oferta.link;
     if (alvo) {
       const p = await previa(alvo).catch(() => ({}));
       if (p?.imagem && p.imagem !== oferta.imagem) {
-        const r = await baixar(p.imagem);
-        considerar(r);
-        if (r) oferta.imagem = p.imagem;
+        const antes = melhor;
+        await tentar([...fotosGrandesMl(p.imagem), p.imagem]);
+        if (melhor !== antes) oferta.imagem = p.imagem;
       }
     }
   }

@@ -136,6 +136,8 @@ export async function montarOferta(texto, { link: linkForcado, extra = {}, deOut
     nota: auto.nota ?? null,
     vendas: auto.vendas ?? null,
     link,
+    // O endereço do produto (sem o link de afiliado): é dele que sai o código do anúncio para buscar a foto grande.
+    urlProduto,
     chave: auto.chave || `${loja}:${urlProduto.split('?')[0]}`,
     criadaEm: new Date().toISOString(),
   };
