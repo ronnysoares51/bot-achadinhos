@@ -44,3 +44,48 @@ test('modelo padrão: nota e vendidos aparecem separados', () => {
   assert.match(t, /Nota 4,8/);
   assert.doesNotMatch(t, /vendidos/);
 });
+
+// ------------------------------------------------------------------ Mercado Livre
+
+const { fotosGrandesMl, codigoMl } = await import('../src/imagem.js');
+const { fotoGrandeDaPrevia } = await import('../src/destinos/whatsapp.js');
+
+test('ML: miniatura do mlstatic vira a foto grande, em JPG', () => {
+  const urls = fotosGrandesMl('https://http2.mlstatic.com/D_Q_NP_689232-MLB74221357183_012024-R.webp');
+  assert.equal(urls[0], 'https://http2.mlstatic.com/D_NQ_NP_2X_689232-MLB74221357183_012024-F.jpg');
+  assert.equal(urls[1], 'https://http2.mlstatic.com/D_NQ_NP_689232-MLB74221357183_012024-O.jpg');
+  assert.deepEqual(fotosGrandesMl('https://x/foto.jpg'), []);
+});
+
+test('ML: acha o código do anúncio e do catálogo no link', () => {
+  assert.deepEqual(codigoMl('https://produto.mercadolivre.com.br/MLB-3456789012-fone-bluetooth-_JM'), { tipo: 'items', id: 'MLB3456789012' });
+  assert.deepEqual(codigoMl('https://www.mercadolivre.com.br/fone/p/MLB19876543?pdp_filters=item_id%3AMLB3456789012'), { tipo: 'products', id: 'MLB19876543' });
+  assert.equal(codigoMl('https://meli.la/2AbCdEf'), null);
+});
+
+test('ML clonado com só a miniatura da prévia: troca pela foto grande da API do ML', async () => {
+  const o = { loja: 'mercadolivre', fotoOriginal: pequena, link: 'https://meli.la/xyz', urlProduto: 'https://produto.mercadolivre.com.br/MLB-3456789012-fone' };
+  const pedidas = [];
+  await garantirFoto(o, {
+    baixar: async (u) => {
+      pedidas.push(u);
+      return u.includes('2X_') ? grande : null;
+    },
+    previa: async () => ({}),
+    apiMl: async (link) => (link.includes('MLB-3456789012') ? ['https://http2.mlstatic.com/D_123-MLB3456789012_112026-O.jpg'] : []),
+  });
+  assert.equal(o.fotoOriginal, grande.base64);
+  assert.equal(pedidas[0], 'https://http2.mlstatic.com/D_NQ_NP_2X_123-MLB3456789012_112026-F.jpg');
+});
+
+test('ML: imagem pequena da oferta é trocada pela versão grande do mesmo arquivo', async () => {
+  const o = { loja: 'mercadolivre', imagem: 'https://http2.mlstatic.com/D_123-MLB1_112026-I.jpg', link: 'https://l' };
+  await garantirFoto(o, { baixar: async (u) => (u.endsWith('-F.jpg') ? grande : null), previa: async () => ({}), apiMl: async () => [] });
+  assert.equal(o.fotoOriginal, grande.base64);
+});
+
+test('prévia de link do WhatsApp: acha a foto grande guardada no servidor', () => {
+  const chave = new Uint8Array(32).fill(7);
+  assert.deepEqual(fotoGrandeDaPrevia({ thumbnailDirectPath: '/o1/v/t62/abc', mediaKey: chave }), { directPath: '/o1/v/t62/abc', mediaKey: chave, url: undefined });
+  assert.equal(fotoGrandeDaPrevia({ jpegThumbnail: new Uint8Array(10) }), null);
+});

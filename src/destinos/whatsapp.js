@@ -28,6 +28,34 @@ async function monitorado(jid) {
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const LIMITE_FOTO = 5 * 1024 * 1024;
+/** A biblioteca do WhatsApp carregada em conectar(); as funções de baixar foto usam a mesma. */
+let bibliotecaBaileys = null;
+
+/**
+ * Onde está a foto grande da prévia de link de uma mensagem (ou null). O WhatsApp guarda essa foto
+ * no servidor, cifrada, e a mensagem só traz o caminho e a chave (thumbnailDirectPath + mediaKey).
+ */
+export function fotoGrandeDaPrevia(mensagemDeTexto) {
+  const m = mensagemDeTexto;
+  if (!m?.thumbnailDirectPath || !m?.mediaKey?.length) return null;
+  return { directPath: m.thumbnailDirectPath, mediaKey: m.mediaKey, url: undefined };
+}
+
+/** Baixa e decifra uma mídia do WhatsApp; devolve base64 (ou null se vazia ou grande demais). */
+async function baixarDoWhatsApp(conteudo, tipo) {
+  if (!bibliotecaBaileys) return null;
+  const stream = await bibliotecaBaileys.downloadContentFromMessage(conteudo, tipo);
+  const partes = [];
+  let tamanho = 0;
+  for await (const parte of stream) {
+    tamanho += parte.length;
+    if (tamanho > LIMITE_FOTO) return null;
+    partes.push(parte);
+  }
+  return tamanho ? Buffer.concat(partes, tamanho).toString('base64') : null;
+}
+
 // Cópia das mensagens enviadas: quando um celular do grupo não consegue abrir a mensagem,
 // ele pede reenvio e o WhatsApp chama getMessage. Sem isso a mensagem fica em
 // "Aguardando mensagem" para os membros, mesmo com o envio dando certo.
@@ -97,6 +125,7 @@ async function conectar(opcoes) {
   } catch {
     baileys = await import('@whiskeysockets/baileys');
   }
+  bibliotecaBaileys = baileys;
   const makeWASocket = baileys.default?.default || baileys.default || baileys.makeWASocket;
   const { useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
   const QRCode = (await import('qrcode')).default;
@@ -141,22 +170,28 @@ async function conectar(opcoes) {
         const texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption;
         if (!texto) continue;
         const previa = msg.extendedTextMessage?.jpegThumbnail;
-        const baixarFoto = (msg.imageMessage || previa?.length) && (async () => {
+        const previaGrande = fotoGrandeDaPrevia(msg.extendedTextMessage);
+        const baixarFoto = (msg.imageMessage || previa?.length || previaGrande) && (async () => {
           if (!msg.imageMessage) {
-            console.log('[clone] Capturada imagem da previa do link.');
+            // A prévia de link traz duas fotos: a miniatura dentro da mensagem (jpegThumbnail,
+            // uns 100 px, era ela que saía pequenininha) e, quando o grupo de origem manda a
+            // prévia grande, a foto inteira guardada no servidor do WhatsApp. Baixa a grande.
+            if (previaGrande) {
+              const grande = await baixarDoWhatsApp(previaGrande, 'thumbnail-link').catch((e) => {
+                console.warn(`[clone] Prévia grande do link não baixou (${e.message}); usando a miniatura.`);
+                return null;
+              });
+              if (grande) {
+                console.log(`[clone] Capturada a imagem grande da prévia do link (${Math.round(grande.length * 0.75 / 1024)} KB).`);
+                return grande;
+              }
+            }
+            if (!previa?.length) return null;
+            console.log('[clone] Capturada só a miniatura da prévia do link; a foto grande será buscada na loja.');
             return Buffer.from(previa).toString('base64');
           }
-          const limite = 5 * 1024 * 1024;
-          if (Number(msg.imageMessage.fileLength) > limite) return null;
-          const stream = await baileys.downloadContentFromMessage(msg.imageMessage, 'image');
-          const partes = [];
-          let tamanho = 0;
-          for await (const parte of stream) {
-            tamanho += parte.length;
-            if (tamanho > limite) return null;
-            partes.push(parte);
-          }
-          return tamanho ? Buffer.concat(partes, tamanho).toString('base64') : null;
+          if (Number(msg.imageMessage.fileLength) > LIMITE_FOTO) return null;
+          return baixarDoWhatsApp(msg.imageMessage, 'image');
         });
         await aoReceberMensagem({ grupo: jid, nomeGrupo: nomesGrupos.get(jid) || jid, texto, baixarFoto });
       } catch (e) {
