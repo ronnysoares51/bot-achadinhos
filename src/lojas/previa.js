@@ -1,3 +1,6 @@
+import { config } from '../config.js';
+import { normalizarCookies } from './mlLinkbuilder.js';
+
 // Lê título, foto e preço públicos da página do produto (metatags Open Graph / JSON-LD).
 // Pode falhar quando a loja bloqueia robôs (comum no TikTok Shop e na Shein): aí o admin completa à mão.
 
@@ -30,16 +33,39 @@ export function lerPrevia(html) {
   };
 }
 
+const ML = /(^|\.)(mercadolivre\.com\.br|mercadolibre\.com|mercadolivre\.com|meli\.la|mlb\.am)$/i;
+const BLOQUEIO_ML = /account-verification|suspicious-traffic/i;
+let avisouBloqueioMl = false;
+
+/** Mercado Livre manda robô anônimo para uma página de "verificação de conta" (sem foto/título/preço).
+ *  Com os cookies da conta de afiliado conectada o acesso volta ao normal. */
+function cabecalhosPara(url) {
+  const h = { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' };
+  try {
+    if (ML.test(new URL(url).hostname) && config.mercadolivre?.cookies) {
+      const ck = normalizarCookies(config.mercadolivre.cookies);
+      if (ck) h.Cookie = ck;
+    }
+  } catch {
+    /* url inválida: segue sem cookie */
+  }
+  return h;
+}
+
 export async function buscarPrevia(url, { timeoutMs = 12000 } = {}) {
   try {
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!resp.ok) return { urlFinal: resp.url || url };
+    const resp = await fetch(url, { headers: cabecalhosPara(url), redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+    const final = resp.url || url;
+    if (BLOQUEIO_ML.test(final)) {
+      if (!avisouBloqueioMl) {
+        avisouBloqueioMl = true;
+        console.warn('[previa] Mercado Livre bloqueou a leitura da página (verificação de conta). Atualize os cookies em Minhas lojas; sem isso a foto sai pequena.');
+      }
+      return { urlFinal: url, bloqueada: true };
+    }
+    if (!resp.ok) return { urlFinal: final };
     const html = await resp.text();
-    return { ...lerPrevia(html), urlFinal: resp.url || url };
+    return { ...lerPrevia(html), urlFinal: final };
   } catch {
     return { urlFinal: url };
   }
