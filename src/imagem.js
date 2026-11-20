@@ -8,7 +8,56 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 export const TAMANHO_BOM = 25_000; // abaixo disto a imagem é miniatura
 const TAMANHO_MAX = 8 * 1024 * 1024;
 
+export const LADO_BOM = 500; // foto com o lado menor abaixo disto sai pequena no WhatsApp
 const bytesDe = (b64) => (b64 ? Math.floor((String(b64).length * 3) / 4) : 0);
+
+/** Largura e altura de um JPG, PNG ou WebP lendo só o cabeçalho (null se não reconhecer). */
+export function dimensoes(buf) {
+  if (!buf || buf.length < 30) return null;
+  try {
+    if (buf[0] === 0x89 && buf.toString('ascii', 1, 4) === 'PNG') return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+    if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+      const tipo = buf.toString('ascii', 12, 16);
+      if (tipo === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) };
+      if (tipo === 'VP8L') {
+        const b = buf.readUInt32LE(21);
+        return { w: 1 + (b & 0x3fff), h: 1 + ((b >> 14) & 0x3fff) };
+      }
+      if (tipo === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff };
+      return null;
+    }
+    if (buf[0] === 0xff && buf[1] === 0xd8) {
+      let i = 2;
+      while (i + 9 < buf.length) {
+        if (buf[i] !== 0xff) return null;
+        const marca = buf[i + 1];
+        if (marca === 0xd8 || (marca >= 0xd0 && marca <= 0xd7) || marca === 0x01 || marca === 0xff) {
+          i += marca === 0xff ? 1 : 2;
+          continue;
+        }
+        // SOF0..SOF15 (menos DHT/JPG/DAC) trazem altura e largura
+        if (marca >= 0xc0 && marca <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marca)) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
+        i += 2 + buf.readUInt16BE(i + 2);
+      }
+    }
+  } catch {
+    /* cabeçalho estranho */
+  }
+  return null;
+}
+
+/**
+ * Qualidade de uma foto (base64): { boa, pontos }. Usa o tamanho em pixels quando dá para ler;
+ * só olhar os bytes enganava: a prévia de link do WhatsApp tem 30-60 KB e só ~300 px, e passava
+ * como "foto boa", saindo pequena no grupo.
+ */
+export function qualidade(b64) {
+  if (!b64) return { boa: false, pontos: 0 };
+  const buf = Buffer.from(String(b64), 'base64');
+  const d = dimensoes(buf);
+  if (d?.w && d?.h) return { boa: Math.min(d.w, d.h) >= LADO_BOM, pontos: d.w * d.h, ...d };
+  return { boa: buf.length >= TAMANHO_BOM, pontos: buf.length * 6 };
+}
 
 /** Baixa uma imagem e devolve { base64, bytes } (ou null se não for uma imagem utilizável). */
 export async function baixarImagem(url, { timeoutMs = 15000 } = {}) {
@@ -81,44 +130,48 @@ export async function fotosDaApiMl(link, { json = lerJson } = {}) {
  */
 export async function garantirFoto(oferta, { baixar = baixarImagem, previa = buscarPrevia, apiMl = fotosDaApiMl } = {}) {
   if (!oferta || oferta.fotoTentada) return oferta;
-  const atual = bytesDe(oferta.fotoOriginal);
-  if (atual >= TAMANHO_BOM) {
+  const atual = qualidade(oferta.fotoOriginal);
+  if (atual.boa) {
     oferta.fotoTentada = true;
     return oferta;
   }
   let melhor = null;
   const considerar = (r) => {
-    if (r && (!melhor || r.bytes > melhor.bytes)) melhor = r;
+    if (!r) return;
+    const q = qualidade(r.base64);
+    if (!melhor || q.pontos > melhor.q.pontos) melhor = { ...r, q };
   };
+  const boa = () => Boolean(melhor?.q.boa);
 
   const tentar = async (urls) => {
     for (const url of urls) {
-      if (melhor?.bytes >= TAMANHO_BOM) return;
+      if (boa()) return;
       considerar(await baixar(url));
     }
   };
   const doMl = oferta.loja === 'mercadolivre' || /mercadoli[bv]re|meli\.la|mlstatic/i.test(`${oferta.link} ${oferta.urlProduto} ${oferta.imagem}`);
   if (oferta.imagem) await tentar([...fotosGrandesMl(oferta.imagem), oferta.imagem]);
-  if (doMl && !(melhor?.bytes >= TAMANHO_BOM)) {
+  if (doMl && !boa()) {
     for (const alvo of [oferta.urlProduto, oferta.link].filter(Boolean)) {
       const fotos = await apiMl(alvo).catch(() => []);
       for (const f of fotos) await tentar([...fotosGrandesMl(f), f]);
       if (fotos.length) break;
     }
   }
-  if (!(melhor?.bytes >= TAMANHO_BOM)) {
-    const alvo = oferta.urlProduto || oferta.link;
-    if (alvo) {
+  if (!boa()) {
+    for (const alvo of [...new Set([oferta.urlProduto, oferta.link].filter(Boolean))]) {
       const p = await previa(alvo).catch(() => ({}));
       if (p?.imagem && p.imagem !== oferta.imagem) {
         const antes = melhor;
         await tentar([...fotosGrandesMl(p.imagem), p.imagem]);
         if (melhor !== antes) oferta.imagem = p.imagem;
       }
+      if (boa()) break;
     }
   }
-  if (melhor && melhor.bytes > atual) oferta.fotoOriginal = melhor.base64;
-  oferta.fotoTentada = Boolean(melhor) || atual > 0;
-  console.log(`[imagem] foto da oferta: ${bytesDe(oferta.fotoOriginal) ? `${Math.round(bytesDe(oferta.fotoOriginal) / 1024)} KB` : 'nenhuma'}`);
+  if (melhor && melhor.q.pontos > atual.pontos) oferta.fotoOriginal = melhor.base64;
+  oferta.fotoTentada = Boolean(melhor) || atual.pontos > 0;
+  const final = qualidade(oferta.fotoOriginal);
+  console.log(`[imagem] foto da oferta: ${oferta.fotoOriginal ? `${Math.round(bytesDe(oferta.fotoOriginal) / 1024)} KB${final.w ? ` (${final.w}x${final.h})` : ''}${final.boa ? '' : ' — pequena, não achei maior'}` : 'nenhuma'}`);
   return oferta;
 }

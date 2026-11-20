@@ -76,3 +76,10 @@ test('busca automática filtra por desconto e nota', () => {
   );
   assert.deepEqual(r.map((o) => o.link), ['d', 'a']);
 });
+
+test('clone: frase de chamada em maiúsculas não vira o título do produto', async () => {
+  const { extrairDeMensagem } = await import('../src/oferta.js');
+  const msg = '🚨🔥\nACHADINHO IMPERDÍVEL!\n\n😍 OLHA O PRECINHO QUE APARECEU\n\n💥 OLHA ESSA OPORTUNIDADE!\n\n❌ De: R$ 145,00\n✅ AGORA POR APENAS R$ 137,84\n\nCreme Facial Medicube Collagen\nhttps://meli.la/abc';
+  const r = extrairDeMensagem(msg);
+  if (r.titulo !== 'Creme Facial Medicube Collagen') throw new Error(`título errado: ${r.titulo}`);
+});
