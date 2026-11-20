@@ -156,11 +156,31 @@ async function conectar(opcoes) {
       if (update.status === 0) console.error(`[whatsapp] O WhatsApp recusou a mensagem ${key.id} em ${key.remoteJid}.`);
     }
   });
-  sock.ev.on('groups.update', (lista) => lista.forEach((g) => metaGrupos.delete(g.id)));
-  sock.ev.on('group-participants.update', ({ id }) => metaGrupos.delete(id));
+  sock.ev.on('groups.update', (lista) => lista.forEach((g) => {
+    metaGrupos.delete(g.id);
+    if (g.subject) lembrarGrupo(g.id, g.subject);
+  }));
+  sock.ev.on('groups.upsert', (lista) => lista.forEach((g) => lembrarGrupo(g.id, g.subject)));
+  sock.ev.on('chats.upsert', (lista) => lista.forEach((c) => lembrarGrupo(c.id, c.name || c.subject)));
+  sock.ev.on('chats.update', (lista) => lista.forEach((c) => c.name && lembrarGrupo(c.id, c.name)));
+  sock.ev.on('messaging-history.set', ({ chats = [] }) => chats.forEach((c) => lembrarGrupo(c.id, c.name || c.subject)));
+  sock.ev.on('group-participants.update', ({ id, participants = [], action }) => {
+    metaGrupos.delete(id);
+    // O próprio número saiu ou foi removido: o grupo some da lista.
+    const eu = [sock?.user?.id, sock?.user?.lid].filter(Boolean).map((j) => String(j).split(':')[0].split('@')[0]);
+    const quem = participants.map((p) => String(p?.id || p).split(':')[0].split('@')[0]);
+    if (action === 'remove' && quem.some((q) => eu.includes(q))) esquecerGrupo(id);
+  });
 
   // Clone de ofertas: mensagens dos grupos monitorados vão para o callback.
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    for (const m of messages) {
+      const jid = m.key?.remoteJid;
+      if (jid?.endsWith('@g.us') && !gruposConhecidos().has(jid)) {
+        lembrarGrupo(jid, nomesGrupos.get(jid) || '');
+        if (!nomesGrupos.get(jid)) sock.groupMetadata(jid).then((meta) => lembrarGrupo(jid, meta.subject)).catch(() => {});
+      }
+    }
     if (type !== 'notify' || !aoReceberMensagem || !config.clone.grupos.length) return;
     for (const m of messages) {
       try {
@@ -242,18 +262,94 @@ export async function desconectarWhatsApp() {
   }
   fs.rmSync(config.whatsapp.pastaSessao, { recursive: true, force: true });
   fs.rmSync(path.join(config.pastaDados, 'whatsapp-qr.png'), { force: true });
+  // Outro número pode ser conectado depois: a lista de grupos deste não vale para ele.
+  fs.rmSync(ARQUIVO_GRUPOS(), { force: true });
+  conhecidos = new Map();
 }
 
 let cacheGrupos = { quando: 0, lista: [] };
 
+// Grupos conhecidos (id -> nome), guardados em arquivo. O groupFetchAllParticipating do WhatsApp às
+// vezes volta incompleto ou falha (muitos grupos, comunidades, limite de requisições); então a lista
+// também junta os grupos vistos no histórico da conexão, em atualizações e em mensagens recebidas.
+const ARQUIVO_GRUPOS = () => path.join(config.pastaDados, 'whatsapp-grupos.json');
+let conhecidos = null;
+let salvarDepois = null;
+
+function gruposConhecidos() {
+  if (!conhecidos) {
+    try {
+      conhecidos = new Map(Object.entries(JSON.parse(fs.readFileSync(ARQUIVO_GRUPOS(), 'utf8'))));
+    } catch {
+      conhecidos = new Map();
+    }
+  }
+  return conhecidos;
+}
+
+/** Registra um grupo visto (sem apagar um nome bom com um vazio). Exportada para testes. */
+export function lembrarGrupo(id, nome) {
+  if (!id || !String(id).endsWith('@g.us')) return;
+  const mapa = gruposConhecidos();
+  const novo = String(nome || '').trim();
+  if (mapa.has(id) && (!novo || mapa.get(id) === novo)) return;
+  mapa.set(id, novo || mapa.get(id) || '');
+  if (novo) nomesGrupos.set(id, novo);
+  cacheGrupos.quando = 0;
+  salvarGrupos();
+}
+
+function salvarGrupos() {
+  clearTimeout(salvarDepois);
+  salvarDepois = setTimeout(() => {
+    try {
+      fs.mkdirSync(config.pastaDados, { recursive: true });
+      fs.writeFileSync(ARQUIVO_GRUPOS(), JSON.stringify(Object.fromEntries(gruposConhecidos()), null, 1));
+    } catch (e) {
+      console.warn('[whatsapp] Não consegui salvar a lista de grupos:', e.message);
+    }
+  }, 2000);
+  salvarDepois.unref?.();
+}
+
+/** Tira um grupo da lista (o número saiu ou foi removido). */
+function esquecerGrupo(id) {
+  if (gruposConhecidos().delete(id)) salvarGrupos();
+  cacheGrupos.quando = 0;
+}
+
+/** Junta a resposta do WhatsApp com os grupos conhecidos, em ordem alfabética. Exportada para testes. */
+export function juntarGrupos(doServidor = [], mapa = gruposConhecidos()) {
+  const todos = new Map();
+  for (const [id, nome] of mapa) todos.set(id, nome);
+  for (const g of doServidor) if (g?.id) todos.set(g.id, g.subject || g.nome || todos.get(g.id) || '');
+  return [...todos]
+    .filter(([id]) => id.endsWith('@g.us'))
+    .map(([id, nome]) => ({ id, nome: nome || `Grupo sem nome (${id.replace('@g.us', '')})` }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+}
+
 /** Lista os grupos em que o número está (nome + ID). Guarda por 5 minutos. */
 export async function listarGrupos({ usarCache = false } = {}) {
-  if (!sock || !conectado) throw new Error('WhatsApp não conectado.');
+  if (!sock || !conectado) {
+    if (gruposConhecidos().size) return juntarGrupos();
+    throw new Error('WhatsApp não conectado.');
+  }
   if (usarCache && Date.now() - cacheGrupos.quando < 5 * 60_000) return cacheGrupos.lista;
-  const grupos = await sock.groupFetchAllParticipating();
-  const lista = Object.values(grupos).map((g) => ({ id: g.id, nome: g.subject })).sort((a, b) => a.nome.localeCompare(b.nome));
-  cacheGrupos = { quando: Date.now(), lista };
-  return lista;
+  let doServidor = null;
+  for (let i = 0; i < 2 && !doServidor; i++) {
+    doServidor = await sock.groupFetchAllParticipating().catch((e) => {
+      console.warn(`[whatsapp] Falha ao listar grupos (${e.message})${i ? '' : '; tentando de novo'}.`);
+      return null;
+    });
+    if (!doServidor && !i) await esperar(1500);
+  }
+  const lista = Object.values(doServidor || {});
+  for (const g of lista) lembrarGrupo(g.id, g.subject);
+  const final = juntarGrupos(lista);
+  if (!final.length && !doServidor) throw new Error('O WhatsApp não respondeu a lista de grupos.');
+  cacheGrupos = { quando: Date.now(), lista: final };
+  return final;
 }
 
 async function resolverDestinos(desejados = config.whatsapp.grupos) {
