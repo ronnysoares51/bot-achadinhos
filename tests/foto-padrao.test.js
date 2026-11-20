@@ -89,3 +89,34 @@ test('prévia de link do WhatsApp: acha a foto grande guardada no servidor', () 
   assert.deepEqual(fotoGrandeDaPrevia({ thumbnailDirectPath: '/o1/v/t62/abc', mediaKey: chave }), { directPath: '/o1/v/t62/abc', mediaKey: chave, url: undefined });
   assert.equal(fotoGrandeDaPrevia({ jpegThumbnail: new Uint8Array(10) }), null);
 });
+
+// ------------------------------------------------------------------ tamanho real da foto
+
+const { dimensoes, qualidade } = await import('../src/imagem.js');
+
+/** JPG mínimo só com o cabeçalho SOF0 (o suficiente para ler largura e altura), com enchimento. */
+function jpg(w, h, enchimento = 40_000) {
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+  return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(14), sof, Buffer.alloc(enchimento, 7)]);
+}
+
+test('lê largura e altura do JPG', () => {
+  assert.deepEqual(dimensoes(jpg(1200, 900)), { w: 1200, h: 900 });
+});
+
+test('prévia do WhatsApp com 40 KB mas só 320 px não conta como foto boa', () => {
+  assert.equal(qualidade(jpg(320, 320).toString('base64')).boa, false);
+  assert.equal(qualidade(jpg(1200, 1200, 1000).toString('base64')).boa, true);
+});
+
+test('ML clonado com a prévia grande do WhatsApp (pesada mas pequena): troca pela foto da loja', async () => {
+  const previaWa = jpg(320, 320).toString('base64');
+  const daLoja = { base64: jpg(1200, 1200).toString('base64'), bytes: 50_000 };
+  const o = { loja: 'mercadolivre', fotoOriginal: previaWa, link: 'https://meli.la/xyz', urlProduto: 'https://produto.mercadolivre.com.br/MLB-3456789012-x' };
+  await garantirFoto(o, {
+    baixar: async (u) => (u.includes('2X_') ? daLoja : null),
+    previa: async () => ({ imagem: 'https://http2.mlstatic.com/D_Q_NP_689232-MLB74221357183_012024-O.webp' }),
+    apiMl: async () => [],
+  });
+  assert.equal(o.fotoOriginal, daLoja.base64);
+});

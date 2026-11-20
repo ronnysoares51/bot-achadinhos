@@ -40,6 +40,16 @@ export function lerMensagemAdmin(texto) {
   };
 }
 
+// Frases de chamada dos outros grupos ("ACHADINHO IMPERDÍVEL!", "OLHA O PRECINHO") não são o nome do produto.
+const CHAMADA = /\b(achadinho|achado|imperd[ií]ve(l|is)|olha|olhem|precinho|oportunidade|aproveit|corre+|baixou|rel[aâ]mpago|bug|promo|oferta|desconto|economi|off\b|agora por|apenas|s[oó] hoje|[uú]ltimas? unidades|n[aã]o perca|garant[ae])/i;
+export function ehChamada(linha) {
+  const l = String(linha || '').trim();
+  const letras = l.replace(/[^a-zà-ú]/gi, '');
+  const maiusculas = letras.length >= 6 && letras === letras.toUpperCase();
+  const palavras = l.split(/\s+/).filter(Boolean).length;
+  return CHAMADA.test(l) && (maiusculas || palavras <= 5 || /[!]$/.test(l));
+}
+
 /**
  * Lê uma mensagem de oferta escrita por outra pessoa (grupo monitorado):
  * título = primeira linha com texto de verdade; preços = valores "R$"; cupom = palavra após "cupom".
@@ -59,8 +69,8 @@ export function extrairDeMensagem(texto) {
 
   const titulo = t
     .split('\n')
-    .map((l) => l.replace(/[*_~`]/g, '').replace(/[\p{Extended_Pictographic}️‍]/gu, '').trim())
-    .find((l) => l.length >= 6 && !/https?:\/\//i.test(l) && !/R\$/i.test(l) && !/^(cupom|link|compre|corre|oferta|promo[cç][aã]o)\b/i.test(l) && /[a-zà-ú]{3}/i.test(l)) || null;
+    .map((l) => l.replace(/[*_~`]/g, '').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}️‍]/gu, '').trim())
+    .find((l) => l.length >= 6 && !/https?:\/\//i.test(l) && !/R\$/i.test(l) && !/^(cupom|link|compre|corre|oferta|promo[cç][aã]o)\b/i.test(l) && /[a-zà-ú]{3}/i.test(l) && !ehChamada(l)) || null;
 
   return { titulo: titulo ? titulo.slice(0, 140) : null, precoDe, precoPor, cupom };
 }
