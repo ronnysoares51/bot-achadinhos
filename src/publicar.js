@@ -41,7 +41,8 @@ export async function publicarNaAutomacao(oferta, a) {
  */
 export async function publicar(oferta, fuso = config.agendador.fusoHorario) {
   await garantirFoto(oferta);
-  const ativas = listarAutomacoes().filter((a) => a.ativa);
+  // Oferta clonada para uma automação vai só para os destinos dela.
+  const ativas = listarAutomacoes().filter((a) => a.ativa && (!oferta.automacao || a.id === oferta.automacao));
   const dia = diaLocal(new Date(), fuso);
   const resultados = [];
   if (ativas.length) {

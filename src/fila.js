@@ -29,7 +29,8 @@ export function jaPostada(chave, agora = Date.now()) {
 
 export function adicionar(oferta) {
   const d = ler();
-  if (d.fila.some((o) => o.chave === oferta.chave)) return null;
+  // A mesma oferta pode estar na fila de automações diferentes (cada uma com a sua cópia).
+  if (d.fila.some((o) => o.chave === oferta.chave && (o.automacao || '') === (oferta.automacao || ''))) return null;
   const item = { id: crypto.randomBytes(4).toString('hex'), fonte: 'manual', criadaEm: new Date().toISOString(), ...oferta };
   d.fila.push(item);
   salvar(d);
