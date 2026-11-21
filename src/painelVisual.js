@@ -444,7 +444,7 @@ export function telaAutomacao(d) {
       <script>document.querySelectorAll('[data-cats]').forEach(b=>b.addEventListener('click',()=>document.querySelectorAll('#cats input').forEach(i=>i.checked=b.dataset.cats==='todas')));</script></div>
     <div><span class="l">Clonar só destes grupos</span>
       ${d.gruposClone?.length ? `<div class="grupos">${d.gruposClone.map((g) => `<label><input type="checkbox" name="origens" value="${esc(g.id)}" ${a.origens.includes(g.id) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${g.rede}</span></label>`).join('')}</div>
-      <span class="ajuda">Vale para ofertas do clone. Nenhum marcado = todos os grupos clonados.</span>`
+      <span class="ajuda">Cada automação clona só dos grupos marcados aqui e posta tudo o que vier deles (as categorias não barram esses clones). Nenhum marcado = clona dos grupos que nenhuma outra automação marcou.</span>`
         : '<span class="ajuda">Nenhum grupo para clonar ainda. Adicione em <a href="/clone">Clone de ofertas</a>.</span>'}</div>
     <div><span class="l">Lojas</span><div class="opcoes">
       ${Object.entries(NOMES_LOJA).map(([k, v]) => opcao('lojas', k, v, !a.lojas.length || a.lojas.includes(k))).join('')}

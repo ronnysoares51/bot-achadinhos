@@ -154,8 +154,11 @@ export function aceita(oferta, a, { ignorarHistorico = false } = {}) {
   if (oferta.automacao && oferta.automacao !== a.id) return { ok: false, motivo: 'de outra automação' };
   if (!a.fontes.includes(fonte)) return { ok: false, motivo: `fonte ${fonte} não usada` };
   if (a.lojas.length && !a.lojas.includes(oferta.loja)) return { ok: false, motivo: 'loja fora do filtro' };
-  if (fonte === 'clone' && a.origens.length && !a.origens.includes(oferta.origemId) && !a.origens.includes(oferta.origem)) return { ok: false, motivo: 'clone de outro grupo' };
-  if (a.categorias.length) {
+  // Clone feito para esta automação (dos grupos dela): os grupos escolhidos já são o filtro,
+  // então posta mesmo fora das categorias. Clones antigos (sem dono) seguem as regras de antes.
+  const clonePropria = fonte === 'clone' && oferta.automacao === a.id;
+  if (fonte === 'clone' && !clonePropria && a.origens.length && !a.origens.includes(oferta.origemId) && !a.origens.includes(oferta.origem)) return { ok: false, motivo: 'clone de outro grupo' };
+  if (a.categorias.length && !clonePropria) {
     const cats = categoriasDe(`${oferta.titulo || ''} ${oferta.textoOrigem || ''}`);
     if (!a.categorias.some((c) => cats.includes(c))) return { ok: false, motivo: 'fora das categorias' };
   }

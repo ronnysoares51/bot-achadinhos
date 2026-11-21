@@ -107,3 +107,28 @@ test('Categorias: classifica pelo título e a automação filtra', async () => {
   assert.equal(aceita({ titulo: 'Body Bebê Menina', fonte: 'clone', origemId: 'g2@g.us', chave: 'x3' }, a).motivo, 'clone de outro grupo');
   assert.equal(aceita({ titulo: 'Body Bebê Menina', fonte: 'clone', origemId: 'g1@g.us', chave: 'x4' }, a).ok, true);
 });
+
+test('clone por automação: cada uma clona só dos grupos dela; grupo sem dono vai para quem não marcou grupos', async () => {
+  const { automacoesDoGrupo } = await import('../src/clone.js');
+  const principal = base({ id: 'p', nome: 'Principal', origens: [] });
+  const ronny = base({ id: 'r', nome: 'Ronny', origens: ['carro@g.us'] });
+  const pausada = base({ id: 'z', nome: 'Pausada', origens: ['moda@g.us'], ativa: false });
+  const todas = [principal, ronny, pausada];
+  assert.deepEqual(automacoesDoGrupo('carro@g.us', 'Carro', todas).map((a) => a.id), ['r']);
+  assert.deepEqual(automacoesDoGrupo('beleza@g.us', 'Beleza', todas).map((a) => a.id), ['p']);
+  assert.deepEqual(automacoesDoGrupo('moda@g.us', 'Moda', todas).map((a) => a.id), [], 'grupo de automação pausada não vai para a Principal');
+});
+
+test('clone próprio da automação posta mesmo fora das categorias; o de outra não', () => {
+  const ronny = base({ id: 'r', origens: ['carro@g.us'], categorias: ['iphone'] });
+  const propria = oferta({ fonte: 'clone', automacao: 'r', origemId: 'carro@g.us', titulo: 'FAROL AMARELADO FICA NO PASSADO' });
+  assert.ok(aut.aceita(propria, ronny).ok);
+  assert.equal(aut.aceita({ ...propria, automacao: 'p' }, ronny).motivo, 'de outra automação');
+});
+
+test('fila: a mesma oferta entra uma vez para cada automação', () => {
+  const o = oferta({ chave: 'dup-1', fonte: 'clone' });
+  assert.ok(fila.adicionar({ ...o, automacao: 'p' }));
+  assert.ok(fila.adicionar({ ...o, automacao: 'r' }));
+  assert.equal(fila.adicionar({ ...o, automacao: 'r' }), null);
+});
