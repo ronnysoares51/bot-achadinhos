@@ -67,10 +67,16 @@ export function extrairDeMensagem(texto) {
 
   const cupom = (t.match(/cupom\s*[:：-]?\s*\*?([A-Z0-9][A-Z0-9_-]{3,20})\*?/i) || [])[1] || null;
 
-  const titulo = t
+  const candidatas = t
     .split('\n')
-    .map((l) => l.replace(/[*_~`]/g, '').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}️‍]/gu, '').trim())
-    .find((l) => l.length >= 6 && !/https?:\/\//i.test(l) && !/R\$/i.test(l) && !/^(cupom|link|compre|corre|oferta|promo[cç][aã]o)\b/i.test(l) && /[a-zà-ú]{3}/i.test(l) && !ehChamada(l)) || null;
+    .map((l) => l.replace(/[*_~`]/g, '').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}️‍]/gu, '').replace(/^[>\-•·\s]+/, '').trim())
+    .filter((l) => l.length >= 6 && !/https?:\/\//i.test(l) && !/R\$/i.test(l) && !/^(cupom|link|compre|corre|oferta|promo[cç][aã]o)\b/i.test(l) && /[a-zà-ú]{3}/i.test(l) && !ehChamada(l));
+  // Linha toda em MAIÚSCULAS costuma ser chamada ("FAROL AMARELADO FICA NO PASSADO"): prefere o nome normal.
+  const caixaAlta = (l) => {
+    const letras = l.replace(/[^a-zà-ú]/gi, '');
+    return letras.length >= 6 && letras === letras.toUpperCase();
+  };
+  const titulo = candidatas.find((l) => !caixaAlta(l)) || candidatas[0] || null;
 
   return { titulo: titulo ? titulo.slice(0, 140) : null, precoDe, precoPor, cupom };
 }
