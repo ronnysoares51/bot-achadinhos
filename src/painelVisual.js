@@ -633,7 +633,7 @@ export function telaClone(d) {
     <div><span class="l">Grupos do WhatsApp para clonar</span>
     ${d.grupos ? (d.grupos.length ? `<input class="in" id="filtro" placeholder="Buscar grupo pelo nome..." style="margin-bottom:8px">
       <div class="grupos" id="lista">${d.grupos.map((g) => `<label><input type="checkbox" name="grupos" value="${esc(g.id)}" ${sel.has(g.id) || sel.has(g.nome) ? 'checked' : ''}>${esc(g.nome)}<span class="id">${esc(g.id.replace('@g.us', ''))}</span></label>`).join('')}</div>
-      <span class="ajuda">Aparecem os grupos em que o número do bot está. Não marque os seus próprios grupos de destino.</span>` : '<span class="ajuda">O número do bot ainda não está em nenhum grupo. Use o link de convite acima.</span>')
+      <span class="ajuda">Aparecem os grupos em que o número conectado ao bot está (${d.grupos.length}). Faltou algum? Mande qualquer mensagem nele e recarregue a página, ou use o link de convite acima. Não marque os seus próprios grupos de destino.</span>` : '<span class="ajuda">O número do bot ainda não está em nenhum grupo. Use o link de convite acima.</span>')
       : `<div class="aviso" style="margin:0">${ic('alerta')}<div>WhatsApp ${d.waAtivo ? 'desconectado' : 'desligado'}: conecte o número do bot na página inicial para ver a lista de grupos.</div></div>`}
     ${extras.length ? `<input type="hidden" name="extras" value="${esc(extras.join(','))}">` : ''}</div>
 

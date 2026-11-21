@@ -156,7 +156,7 @@ export function aceita(oferta, a, { ignorarHistorico = false } = {}) {
   if (a.lojas.length && !a.lojas.includes(oferta.loja)) return { ok: false, motivo: 'loja fora do filtro' };
   if (fonte === 'clone' && a.origens.length && !a.origens.includes(oferta.origemId) && !a.origens.includes(oferta.origem)) return { ok: false, motivo: 'clone de outro grupo' };
   if (a.categorias.length) {
-    const cats = categoriasDe(oferta.titulo);
+    const cats = categoriasDe(`${oferta.titulo || ''} ${oferta.textoOrigem || ''}`);
     if (!a.categorias.some((c) => cats.includes(c))) return { ok: false, motivo: 'fora das categorias' };
   }
   const preco = Number(oferta.precoPor) || null;

@@ -33,10 +33,17 @@ export async function linkClonavel(url, { resolver = urlFinal, social = produtoD
   return { motivo: 'loja não suportada' };
 }
 
-const recentes = [];
-function dentroDoLimite(agora = Date.now()) {
-  while (recentes.length && agora - recentes[0] > 3600_000) recentes.shift();
-  return recentes.length < config.clone.maxHora;
+// Limite de ofertas clonadas por hora, contado POR GRUPO de origem. Antes era um limite só para
+// todos os grupos: um grupo que posta muito (ex.: 60 ofertas/h) gastava o limite inteiro e as
+// ofertas dos outros grupos eram descartadas, deixando sem nada as automações que clonam deles.
+const recentes = new Map();
+export function dentroDoLimite(grupo = '', agora = Date.now(), max = config.clone.maxHora) {
+  const lista = (recentes.get(grupo) || []).filter((t) => agora - t <= 3600_000);
+  recentes.set(grupo, lista);
+  return lista.length < max;
+}
+function contarClone(grupo = '', agora = Date.now()) {
+  recentes.set(grupo, [...(recentes.get(grupo) || []), agora]);
 }
 
 /**
@@ -46,7 +53,8 @@ function dentroDoLimite(agora = Date.now()) {
 export async function processarMensagem({ texto, nomeGrupo, grupo, baixarFoto }, { aprovar, avisar } = {}) {
   const links = extrairLinks(texto).filter((l) => detectarLoja(l));
   if (!links.length) return { ok: false, motivo: 'sem link de loja' };
-  if (!dentroDoLimite()) return { ok: false, motivo: 'limite por hora atingido' };
+  const origem = grupo || nomeGrupo || '';
+  if (!dentroDoLimite(origem)) return { ok: false, motivo: 'limite por hora deste grupo atingido' };
 
   const motivos = [];
   for (const url of links) {
@@ -64,7 +72,9 @@ export async function processarMensagem({ texto, nomeGrupo, grupo, baixarFoto },
       if (foto) oferta.fotoOriginal = foto;
     }
     if (jaPostada(oferta.chave) || listar().some((o) => o.chave === oferta.chave)) return { ok: false, motivo: 'repetida' };
-    recentes.push(Date.now());
+    contarClone(origem);
+    // Texto original (curto): ajuda a achar a categoria quando o título é uma frase de chamada.
+    oferta.textoOrigem = String(texto || '').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
     registrarClone(nomeGrupo);
     if (config.clone.automatico) {
       adicionar({ ...oferta, fonte: 'clone', origem: nomeGrupo, origemId: grupo });

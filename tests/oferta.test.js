@@ -83,3 +83,21 @@ test('clone: frase de chamada em maiúsculas não vira o título do produto', as
   const r = extrairDeMensagem(msg);
   if (r.titulo !== 'Creme Facial Medicube Collagen') throw new Error(`título errado: ${r.titulo}`);
 });
+
+test('clone: prefere o nome do produto à chamada em maiúsculas', async () => {
+  const { extrairDeMensagem } = await import('../src/oferta.js');
+  const r = extrairDeMensagem('FAROL AMARELADO E FRACO FICA NO PASSADO\n\nKit Polidor de Farol Automotivo 3M\nR$ 49,90\nhttps://meli.la/x');
+  if (r.titulo !== 'Kit Polidor de Farol Automotivo 3M') throw new Error(`título errado: ${r.titulo}`);
+});
+
+test('clone: limite por hora é de cada grupo (um grupo cheio não bloqueia os outros)', async () => {
+  const { dentroDoLimite } = await import('../src/clone.js');
+  if (!dentroDoLimite('grupoB@g.us', Date.now(), 1)) throw new Error('grupo novo deveria estar liberado');
+});
+
+test('automação: categoria também vem do texto original do clone', async () => {
+  const { aceita, normalizar } = await import('../src/automacoes.js');
+  const a = normalizar({ fontes: ['clone'], categorias: ['automotivo'] });
+  const o = { fonte: 'clone', loja: 'shopee', titulo: 'ISSO AQUI QUE É DETALHAMENTO DE VERDADE!', textoOrigem: 'Cera para carro com brilho', chave: 'k1' };
+  if (!aceita(o, a).ok) throw new Error('deveria aceitar pela categoria do texto');
+});
