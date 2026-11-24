@@ -1,0 +1,45 @@
+name: Test and deploy bot
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bot-achadinhos-production
+  cancel-in-progress: false
+jobs:
+  test:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact revision
+        run: docker build -t bot-achadinhos-test .
+      - name: Tests without production sessions
+        run: docker run --rm --network none --entrypoint npm bot-achadinhos-test test
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Deploy verified commit to existing project
+        env:
+          DEPLOY_KEY: ${{ secrets.BOT_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.BOT_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.BOT_DEPLOY_HOST }}
+          REVISION: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS" && test -n "$DEPLOY_HOST"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bot_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_deploy ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/bot_deploy' EXIT
+          ssh -T -i ~/.ssh/bot_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "root@$DEPLOY_HOST" "deploy $REVISION"
+      - name: Check public panel
+        run: curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors --max-time 10 http://achadinhos.rstvquix.com:3010/ -o /dev/null
